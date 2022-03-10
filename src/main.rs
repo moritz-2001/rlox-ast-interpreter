@@ -6,7 +6,7 @@ fn main() -> Result<(), LoxError> {
     let args: Vec<String> = std::env::args().collect();
     match args.len() {
         1 => run_prompt()?,
-        2 => run_file(args.get(2).unwrap())?,
+        2 => run_file(args.get(1).unwrap())?,
         _ => {
             println!("Usage: rlox [script]");
             std::process::exit(64);

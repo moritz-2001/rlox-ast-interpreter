@@ -128,8 +128,6 @@ impl Scanner {
 
     fn identifier(&mut self) -> Result<(), LoxError> {
         while Self::is_ascii_alphanumeric(self.peek()) {self.advance();}
-
-        //self.add_token(TokenType::IDENTIFIER);
         
         let s: String = self.source[self.start .. self.current].iter().collect();
 
