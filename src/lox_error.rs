@@ -4,6 +4,7 @@
 pub enum LoxError {
     IoError(std::io::Error),
     Error(String),
+    ParsingError(String),
 }
 
 impl From<std::io::Error> for LoxError {

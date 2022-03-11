@@ -1,6 +1,7 @@
 use std::{io::{self, Write}};
 use Rlox::LoxError;
 use Rlox::scanner::Scanner;
+use Rlox::parser::Parser;
 
 fn main() -> Result<(), LoxError> {
     let args: Vec<String> = std::env::args().collect();
@@ -41,5 +42,11 @@ fn run_file(path: &str) -> Result<(), LoxError> {
 fn run(input: String) -> Result<(), LoxError> {
     let mut scn = Scanner::new(input);
     scn.scan_tokens()?;
+
+    let mut parser = Parser::new(scn.get_tokens());
+    let expr = parser.parse()?;
+
+    println!("{:#?}", expr);
+
     Ok(())
 }

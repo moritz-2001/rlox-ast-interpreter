@@ -6,3 +6,9 @@ pub use crate::tokens::{Token};
 
 pub mod scanner;
 pub use crate::scanner::Scanner;
+
+pub mod expressions;
+pub use crate::expressions::Expr;
+
+pub mod parser;
+pub use crate::parser::Parser;

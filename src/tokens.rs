@@ -1,10 +1,9 @@
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
-    token_type: TokenType,
-    lexeme: String,
-    literal: Option<Object>,
-    line: usize,
+    pub token_type: TokenType,
+    pub lexeme: String,
+    pub literal: Option<Object>,
+    pub line: usize,
 }
 
 impl Token {
@@ -22,14 +21,17 @@ impl Token {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     String(String),
     Number(f64),
+    False,
+    True,
+    Nil
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum TokenType {
     // Single-character tokens
     LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE, COMMA, DOT,

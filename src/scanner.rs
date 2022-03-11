@@ -20,6 +20,10 @@ impl Scanner {
         }
     }
 
+    pub fn get_tokens(self) -> Vec<Token> {
+        self.tokens
+    }
+
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }
@@ -230,14 +234,14 @@ impl Scanner {
     fn add_token(&mut self, token_type: TokenType) {
         let s: String = self.source[self.start .. self.current].iter().collect();
         let token = Token::new(token_type, s, None, self.line);
-        println!("{:?}", token);
+        //println!("{:?}", token);
         self.tokens.push(token);
     }
 
     fn add_token_object(&mut self, token_type: TokenType, object: Object) {
         let s: String = self.source[self.start .. self.current].iter().collect();
         let token = Token::new(token_type, s, Some(object), self.line);
-        println!("{:?}", token);
+        //println!("{:?}", token);
         self.tokens.push(token);
     } 
 }
