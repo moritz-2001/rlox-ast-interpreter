@@ -1,5 +1,5 @@
-use crate::{tokens::{Token, Object}};
-
+use crate::object::Object;
+use crate::tokens::Token;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
@@ -29,12 +29,5 @@ pub struct LiteralExpr {
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnaryExpr {
     pub operator: Token,
-    pub right: Box<Expr>
+    pub right: Box<Expr>,
 }
-
-
-
-
-
-
-

@@ -1,5 +1,3 @@
-
-
 #[derive(Debug)]
 pub enum LoxError {
     IoError(std::io::Error),

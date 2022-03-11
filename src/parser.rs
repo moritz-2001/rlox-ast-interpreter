@@ -1,8 +1,8 @@
-use crate::Expr;
-use crate::expressions::{BinaryExpr, UnaryExpr, LiteralExpr, GroupingExpr};
-use crate::tokens::{Token, TokenType, Object};
+use crate::expressions::{BinaryExpr, GroupingExpr, LiteralExpr, UnaryExpr};
 use crate::lox_error::LoxError;
-
+use crate::object::Object;
+use crate::tokens::{Token, TokenType};
+use crate::Expr;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -11,10 +11,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            current: 0,
-        }
+        Self { tokens, current: 0 }
     }
 
     pub fn parse(&mut self) -> Result<Expr, LoxError> {
@@ -28,10 +25,10 @@ impl Parser {
     fn equality(&mut self) -> Result<Expr, LoxError> {
         let mut expr = self.comparison()?;
 
-        while self.verify(vec![TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL]){
+        while self.verify(vec![TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL]) {
             let op = self.previous();
             let right = self.comparison()?;
-            expr = Expr::Binary(BinaryExpr{
+            expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator: op,
                 right: Box::new(right),
@@ -45,16 +42,17 @@ impl Parser {
         let mut expr = self.term()?;
 
         while self.verify(vec![
-            TokenType::GREATER, TokenType::GREATER_EQUAL,
-            TokenType::LESS, TokenType::LESS_EQUAL,
-        ]) 
-        {
+            TokenType::GREATER,
+            TokenType::GREATER_EQUAL,
+            TokenType::LESS,
+            TokenType::LESS_EQUAL,
+        ]) {
             let op = self.previous();
             let right = self.term()?;
             expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator: op,
-                right: Box::new(right)
+                right: Box::new(right),
             })
         }
 
@@ -64,13 +62,10 @@ impl Parser {
     fn term(&mut self) -> Result<Expr, LoxError> {
         let mut expr = self.factor()?;
 
-        while self.verify(vec![
-            TokenType::MINUS, TokenType::PLUS,
-        ])
-        {
+        while self.verify(vec![TokenType::MINUS, TokenType::PLUS]) {
             let op = self.previous();
             let right = self.factor()?;
-            expr = Expr::Binary(BinaryExpr{
+            expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator: op,
                 right: Box::new(right),
@@ -82,13 +77,10 @@ impl Parser {
     fn factor(&mut self) -> Result<Expr, LoxError> {
         let mut expr = self.unary()?;
 
-        while self.verify(vec![
-            TokenType::SLASH, TokenType::STAR,
-        ])
-        {
+        while self.verify(vec![TokenType::SLASH, TokenType::STAR]) {
             let op = self.previous();
             let right = self.unary()?;
-            expr = Expr::Binary(BinaryExpr{
+            expr = Expr::Binary(BinaryExpr {
                 left: Box::new(expr),
                 operator: op,
                 right: Box::new(right),
@@ -102,7 +94,7 @@ impl Parser {
         if self.verify(vec![TokenType::BANG, TokenType::MINUS]) {
             let op = self.previous();
             let right = self.unary()?;
-            return Ok(Expr::Unary(UnaryExpr{
+            return Ok(Expr::Unary(UnaryExpr {
                 operator: op,
                 right: Box::new(right),
             }));
@@ -112,32 +104,75 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, LoxError> {
-        if self.is_match(TokenType::FALSE) {return Ok(Expr::Literal(LiteralExpr{value: Object::False}))};
-        if self.is_match(TokenType::TRUE) {return Ok(Expr::Literal(LiteralExpr{value: Object::True}))};
-        if self.is_match(TokenType::NIL) {return Ok(Expr::Literal(LiteralExpr{value: Object::Nil}))};
+        if self.is_match(TokenType::FALSE) {
+            return Ok(Expr::Literal(LiteralExpr {
+                value: Object::Boolean(false),
+            }));
+        };
+        if self.is_match(TokenType::TRUE) {
+            return Ok(Expr::Literal(LiteralExpr {
+                value: Object::Boolean(true),
+            }));
+        };
+        if self.is_match(TokenType::NIL) {
+            return Ok(Expr::Literal(LiteralExpr { value: Object::Nil }));
+        };
 
         if self.verify(vec![TokenType::NUMBER, TokenType::STRING]) {
-            return Ok(Expr::Literal(LiteralExpr{value: self.previous().literal.unwrap()}));
+            return Ok(Expr::Literal(LiteralExpr {
+                value: self.previous().literal.unwrap(),
+            }));
         }
 
         if self.is_match(TokenType::LEFT_PAREN) {
             let expr = self.expression()?;
             self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression.");
-            return Ok(Expr::Grouping(GroupingExpr{expression: Box::new(expr)}));
+            return Ok(Expr::Grouping(GroupingExpr {
+                expression: Box::new(expr),
+            }));
         }
 
-        return Err(LoxError::ParsingError(format!("Unkown error")));
+        return Err(self.get_error(self.peek().unwrap(), "Expect expression"));
+    }
+
+    fn synchronize(&mut self) {
+        self.advance();
+
+        while !self.is_at_end() {
+            if self.previous().token_type == TokenType::SEMICOLON {
+                return;
+            };
+
+            match self.peek().unwrap().token_type {
+                TokenType::CLASS => (),
+                TokenType::FUN => (),
+                TokenType::VAR => (),
+                TokenType::FOR => (),
+                TokenType::IF => (),
+                TokenType::WHILE => (),
+                TokenType::PRINT => (),
+                TokenType::RETURN => (),
+                _ => unreachable!(),
+            }
+
+            self.advance();
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.current >= self.tokens.len()
     }
 
     fn get_error(&self, token: Token, msg: &str) -> LoxError {
-        return LoxError::ParsingError(
-            format!("{} at '{}' {}", token.line, token.lexeme, msg)
-        );
+        return LoxError::ParsingError(format!("{} at '{}' {}", token.line, token.lexeme, msg));
     }
 
     fn consume(&mut self, token: TokenType, msg: &str) -> Token {
-        if self.is_match(token) {return self.previous()}
-        else {todo!()};
+        if self.is_match(token) {
+            return self.previous();
+        } else {
+            todo!()
+        };
     }
 
     fn is_match(&mut self, token: TokenType) -> bool {
@@ -174,9 +209,7 @@ impl Parser {
         self.tokens.get(self.current).map(|x| x.to_owned())
     }
 
-
     fn previous(&mut self) -> Token {
         return self.tokens.get(self.current - 1).unwrap().clone();
     }
-
 }
