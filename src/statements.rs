@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
-use crate::{Expr};
 use crate::tokens::Token;
+use crate::Expr;
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -13,6 +13,3 @@ pub enum Statement {
     While(Expr, Box<Statement>),
     //For(Option<Box<Statement>>, Option<Box<Statement>>, Box<Statement>),
 }
-
-
-

@@ -27,7 +27,7 @@ fn run_prompt() -> Result<(), LoxError> {
         let mut s = String::new();
         stdin.read_line(&mut s)?;
         code += &s.trim();
-        if s.trim().is_empty() && !code.trim().is_empty(){
+        if s.trim().is_empty() && !code.trim().is_empty() {
             break;
         }
     }
@@ -50,9 +50,9 @@ fn run(input: String) -> Result<(), LoxError> {
     //println!("Tokens: {:?}", tokens);
 
     let mut parser = Parser::new(tokens);
-    
+
     let statements = parser.parse()?;
-    
+
     //println!("Statements: {:?}", statements);
     Interpreter::interpret(statements)?;
 

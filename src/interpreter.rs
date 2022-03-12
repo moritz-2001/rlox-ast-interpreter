@@ -1,11 +1,10 @@
 use crate::{
-    expressions::{BinaryExpr, UnaryExpr, AssigmentExpr},
+    expressions::{AssigmentExpr, BinaryExpr, UnaryExpr},
     object::Object,
     tokens::TokenType,
     Expr, LoxError, Statement, Token,
 };
-use std::{collections::{HashMap, VecDeque}};
-use std::rc::Rc;
+use std::collections::{HashMap, VecDeque};
 
 struct Environment(Vec<HashMap<String, Object>>);
 impl Environment {
@@ -22,18 +21,21 @@ impl Environment {
         self.get_current_scope().insert(name, value);
     }
 
-    fn assign(&mut self, name: String, value: Object) -> Result<(), LoxError>{
+    fn assign(&mut self, name: String, value: Object) -> Result<(), LoxError> {
         for env in self.0.iter_mut().rev() {
             if env.contains_key(&name) {
                 env.insert(name, value);
                 return Ok(());
             }
         }
-        Err(LoxError::UndefinedVariable(format!("Undefined variable '{}'.", name)))
+        Err(LoxError::UndefinedVariable(format!(
+            "Undefined variable '{}'.",
+            name
+        )))
     }
 
     fn get_current_scope(&mut self) -> &mut HashMap<String, Object> {
-        let i = self.0.len()-1;
+        let i = self.0.len() - 1;
         self.0.get_mut(i).unwrap()
     }
 
@@ -43,13 +45,16 @@ impl Environment {
                 return Ok(x.clone());
             }
         }
-        Err(LoxError::UndefinedVariable(format!("Undefined variable '{}'.", name)))
+        Err(LoxError::UndefinedVariable(format!(
+            "Undefined variable '{}'.",
+            name
+        )))
     }
 
     fn contains(&self, name: &str) -> bool {
         for env in self.0.iter().rev() {
             if env.contains_key(name) {
-                return true
+                return true;
             }
         }
         false
@@ -60,6 +65,7 @@ pub struct Interpreter {
     statements: Vec<Statement>,
     current: usize,
     env: Environment,
+    print_log: Vec<Object>,
 }
 
 impl Interpreter {
@@ -68,28 +74,30 @@ impl Interpreter {
             statements,
             current: 0,
             env: Environment::new(),
+            print_log: Vec::new(),
         }
     }
 
-    pub fn interpret(statements: Vec<Statement>) -> Result<(), LoxError> {
+    pub fn interpret(statements: Vec<Statement>) -> Result<Vec<Object>, LoxError> {
         let mut interpreter = Self::new(statements);
         while !interpreter.is_at_end() {
             interpreter.eval_stmt(interpreter.peek())?;
             interpreter.advance()?;
         }
 
-        Ok(())
+        Ok(interpreter.print_log)
     }
-
 
     fn eval_stmt(&mut self, stmt: Statement) -> Result<(), LoxError> {
         match stmt {
-            Statement::Expr(e) => {let _ = self.eval_expr(e); Ok(())},
+            Statement::Expr(e) => {
+                let _ = self.eval_expr(e);
+                Ok(())
+            }
             Statement::Print(e) => self.eval_print(e),
             Statement::VarDecl(t, e) => self.var_dec(t, e),
             Statement::Block(stms) => self.block(stms),
-            Statement::If(cond, then_stm, else_stm) 
-                => self.if_stm(cond, *then_stm, else_stm),
+            Statement::If(cond, then_stm, else_stm) => self.if_stm(cond, *then_stm, else_stm),
             Statement::While(cond, stm) => self.while_stm(cond, *stm),
         }
     }
@@ -112,7 +120,12 @@ impl Interpreter {
         Ok(())
     }
 
-    fn if_stm(&mut self, cond: Expr, then_stm: Statement, else_stm: Option<Box<Statement>>) -> Result<(), LoxError> {
+    fn if_stm(
+        &mut self,
+        cond: Expr,
+        then_stm: Statement,
+        else_stm: Option<Box<Statement>>,
+    ) -> Result<(), LoxError> {
         if Self::is_truthy(self.eval_expr(cond)?) {
             self.eval_stmt(then_stm)?;
         } else {
@@ -133,9 +146,9 @@ impl Interpreter {
     fn eval_print(&mut self, e: Expr) -> Result<(), LoxError> {
         let val = self.eval_expr(e)?;
         println!("{}", val);
+        self.print_log.push(val);
         Ok(())
     }
-
 
     fn eval_expr(&mut self, expr: Expr) -> Result<Object, LoxError> {
         match expr {
@@ -158,14 +171,14 @@ impl Interpreter {
                 } else {
                     Ok(left)
                 }
-            },
+            }
             TokenType::OR => {
                 if Self::is_truthy(left.clone()) {
                     Ok(left)
                 } else {
                     Ok(self.eval_expr(e2)?)
                 }
-            },
+            }
             _ => unreachable!(),
         }
     }
@@ -176,7 +189,10 @@ impl Interpreter {
             self.env.assign(e.name.lexeme, val)?;
             Ok(Object::Nil)
         } else {
-            Err(LoxError::Error(format!("Udefined variable '{}'.", e.name.lexeme)))
+            Err(LoxError::Error(format!(
+                "Udefined variable '{}'.",
+                e.name.lexeme
+            )))
         }
     }
 
@@ -189,9 +205,8 @@ impl Interpreter {
             }
         }
 
-
         if e.operator.token_type == TokenType::BANG {
-           return Ok(Object::Boolean(!Self::is_truthy(right)));
+            return Ok(Object::Boolean(!Self::is_truthy(right)));
         }
 
         unreachable!();
@@ -280,7 +295,9 @@ impl Interpreter {
             self.current += 1;
             Ok(statement.clone())
         } else {
-            Err(LoxError::Error(format!("Interpreter error: advance not possible")))
+            Err(LoxError::Error(format!(
+                "Interpreter error: advance not possible"
+            )))
         }
     }
 

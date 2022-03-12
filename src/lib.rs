@@ -21,3 +21,5 @@ pub use crate::interpreter::Interpreter;
 
 pub mod statements;
 pub use crate::statements::Statement;
+
+mod tests;

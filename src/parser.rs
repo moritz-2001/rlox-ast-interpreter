@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 
-use crate::expressions::{BinaryExpr, GroupingExpr, LiteralExpr, UnaryExpr, AssigmentExpr};
+use crate::expressions::{AssigmentExpr, BinaryExpr, GroupingExpr, LiteralExpr, UnaryExpr};
 use crate::lox_error::LoxError;
 use crate::object::Object;
+use crate::statements::Statement;
 use crate::tokens::{Token, TokenType};
 use crate::Expr;
-use crate::statements::Statement;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -21,9 +21,8 @@ impl Parser {
         self.statements()
     }
 
-
     fn statements(&mut self) -> Result<Vec<Statement>, LoxError> {
-        let mut statements : Vec<Statement> = Vec::new();
+        let mut statements: Vec<Statement> = Vec::new();
 
         while !self.is_at_end() && !self.is_match(TokenType::EOF) {
             statements.push(self.declaration()?);
@@ -33,49 +32,62 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Statement, LoxError> {
-
-        let try_ = 
-        {
-            if self.is_match(TokenType::VAR) {self.var_declaration()}
-            else {self.statement()}
+        let try_ = {
+            if self.is_match(TokenType::VAR) {
+                self.var_declaration()
+            } else {
+                self.statement()
+            }
         };
-        
+
         match try_ {
             Ok(stmt) => return Ok(stmt),
             _ => {
                 println!("Sync: {:?}, {:?}", try_, self.tokens[self.current]);
                 self.synchronize()?;
-                self.declaration() 
+                self.declaration()
             }
         }
     }
 
     fn var_declaration(&mut self) -> Result<Statement, LoxError> {
         let name = self.consume(TokenType::IDENTIFIER, "Expect variable name.");
-        
-        let mut init = Expr::Literal(LiteralExpr{value: Object::Nil});
+
+        let mut init = Expr::Literal(LiteralExpr { value: Object::Nil });
         if self.is_match(TokenType::EQUAL) {
             init = self.expression()?;
         }
 
-        self.consume(TokenType::SEMICOLON, "Expecct ';' after variable declaration.");
+        self.consume(
+            TokenType::SEMICOLON,
+            "Expecct ';' after variable declaration.",
+        );
 
         Ok(Statement::VarDecl(name, init))
     }
 
     fn statement(&mut self) -> Result<Statement, LoxError> {
-        if self.is_match(TokenType::PRINT) {return self.print_statement();};
-        if self.is_match(TokenType::LEFT_BRACE) {return self.block_statement();};
-        if self.is_match(TokenType::FOR) {return self.for_statement();};
-        if self.is_match(TokenType::IF) {return self.if_statement();};
-        if self.is_match(TokenType::WHILE) {return self.while_statement();};
+        if self.is_match(TokenType::PRINT) {
+            return self.print_statement();
+        };
+        if self.is_match(TokenType::LEFT_BRACE) {
+            return self.block_statement();
+        };
+        if self.is_match(TokenType::FOR) {
+            return self.for_statement();
+        };
+        if self.is_match(TokenType::IF) {
+            return self.if_statement();
+        };
+        if self.is_match(TokenType::WHILE) {
+            return self.while_statement();
+        };
 
         self.expression_statement()
     }
 
     fn for_statement(&mut self) -> Result<Statement, LoxError> {
         self.consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
-
 
         let initializer = {
             if self.is_match(TokenType::SEMICOLON) {
@@ -86,7 +98,6 @@ impl Parser {
                 Some(self.expression_statement()?)
             }
         };
-
 
         let condition = {
             if !self.check(TokenType::SEMICOLON) {
@@ -106,7 +117,6 @@ impl Parser {
         };
         self.consume(TokenType::RIGHT_PAREN, "Expect ')' after for clauses.");
 
-
         let body = {
             let stm = self.statement()?;
             if let Some(expr) = increment {
@@ -123,8 +133,12 @@ impl Parser {
             if let Some(cond) = condition {
                 Statement::While(cond, Box::new(body))
             } else {
-                Statement::While(Expr::Literal(LiteralExpr{value: Object::Boolean(true)}),
-                Box::new(body))
+                Statement::While(
+                    Expr::Literal(LiteralExpr {
+                        value: Object::Boolean(true),
+                    }),
+                    Box::new(body),
+                )
             }
         };
 
@@ -138,7 +152,6 @@ impl Parser {
                 Ok(while_stm)
             }
         };
-    
     }
 
     fn while_statement(&mut self) -> Result<Statement, LoxError> {
@@ -188,7 +201,6 @@ impl Parser {
         Ok(Statement::Expr(expr))
     }
 
-
     fn expression(&mut self) -> Result<Expr, LoxError> {
         self.assignment()
     }
@@ -201,10 +213,15 @@ impl Parser {
             let val = self.assignment()?;
 
             if let Expr::Variable(name) = expr {
-                return Ok(Expr::Assignment(AssigmentExpr{name, value: Box::new(val)}));
+                return Ok(Expr::Assignment(AssigmentExpr {
+                    name,
+                    value: Box::new(val),
+                }));
             }
 
-            return Err(LoxError::ParsingError(format!("Invalid assignment target.")));
+            return Err(LoxError::ParsingError(format!(
+                "Invalid assignment target."
+            )));
         }
 
         Ok(expr)
@@ -348,13 +365,10 @@ impl Parser {
             return Ok(Expr::Variable(self.previous()));
         }
 
-
-        
         Err(LoxError::NotExpression)
     }
 
-    fn synchronize(&mut self) -> Result<(), LoxError>{
-        
+    fn synchronize(&mut self) -> Result<(), LoxError> {
         if let None = self.advance() {
             return Err(LoxError::TokenListEmpty);
         }
@@ -363,7 +377,7 @@ impl Parser {
             if self.previous().token_type == TokenType::SEMICOLON {
                 return Err(LoxError::Error(format!("Sync")));
             };
-          
+
             match self.peek().unwrap().token_type {
                 TokenType::CLASS => (),
                 TokenType::FUN => (),
@@ -384,7 +398,6 @@ impl Parser {
     fn is_at_end(&self) -> bool {
         self.current >= self.tokens.len()
     }
-
 
     fn consume(&mut self, token: TokenType, msg: &str) -> Token {
         if self.is_match(token) {
