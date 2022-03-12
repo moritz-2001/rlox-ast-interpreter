@@ -66,8 +66,103 @@ impl Parser {
     fn statement(&mut self) -> Result<Statement, LoxError> {
         if self.is_match(TokenType::PRINT) {return self.print_statement();};
         if self.is_match(TokenType::LEFT_BRACE) {return self.block_statement();};
+        if self.is_match(TokenType::FOR) {return self.for_statement();};
+        if self.is_match(TokenType::IF) {return self.if_statement();};
+        if self.is_match(TokenType::WHILE) {return self.while_statement();};
 
         self.expression_statement()
+    }
+
+    fn for_statement(&mut self) -> Result<Statement, LoxError> {
+        self.consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
+
+
+        let initializer = {
+            if self.is_match(TokenType::SEMICOLON) {
+                None
+            } else if self.is_match(TokenType::VAR) {
+                Some(self.var_declaration()?)
+            } else {
+                Some(self.expression_statement()?)
+            }
+        };
+
+
+        let condition = {
+            if !self.check(TokenType::SEMICOLON) {
+                Some(self.expression()?)
+            } else {
+                None
+            }
+        };
+        self.consume(TokenType::SEMICOLON, "Expect ';' after loop condition.");
+
+        let increment = {
+            if !self.check(TokenType::RIGHT_PAREN) {
+                Some(self.expression()?)
+            } else {
+                None
+            }
+        };
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after for clauses.");
+
+
+        let body = {
+            let stm = self.statement()?;
+            if let Some(expr) = increment {
+                let mut deque = VecDeque::with_capacity(2);
+                deque.push_back(Statement::Expr(expr));
+                deque.push_back(stm);
+                Statement::Block(deque)
+            } else {
+                stm
+            }
+        };
+
+        let while_stm = {
+            if let Some(cond) = condition {
+                Statement::While(cond, Box::new(body))
+            } else {
+                Statement::While(Expr::Literal(LiteralExpr{value: Object::Boolean(true)}),
+                Box::new(body))
+            }
+        };
+
+        return {
+            if let Some(init) = initializer {
+                let mut deque = VecDeque::with_capacity(2);
+                deque.push_back(init);
+                deque.push_back(while_stm);
+                Ok(Statement::Block(deque))
+            } else {
+                Ok(while_stm)
+            }
+        };
+    
+    }
+
+    fn while_statement(&mut self) -> Result<Statement, LoxError> {
+        self.consume(TokenType::LEFT_PAREN, "Expect '(' after 'while'.");
+        let cond = self.expression()?;
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after condition");
+        let body = self.statement()?;
+
+        Ok(Statement::While(cond, Box::new(body)))
+    }
+
+    fn if_statement(&mut self) -> Result<Statement, LoxError> {
+        self.consume(TokenType::LEFT_PAREN, "Expect '(' after 'if'.");
+        let condition = self.expression()?;
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after if condition");
+
+        let then_branch = self.statement()?;
+
+        let mut else_branch = None;
+        if self.is_match(TokenType::ELSE) {
+            else_branch = Some(Box::new(self.statement()?));
+        }
+
+        Ok(Statement::If(condition, Box::new(then_branch), else_branch))
     }
 
     fn block_statement(&mut self) -> Result<Statement, LoxError> {
@@ -99,7 +194,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<Expr, LoxError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if self.is_match(TokenType::EQUAL) {
             let equals = self.previous();
@@ -110,6 +205,30 @@ impl Parser {
             }
 
             return Err(LoxError::ParsingError(format!("Invalid assignment target.")));
+        }
+
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> Result<Expr, LoxError> {
+        let mut expr = self.and()?;
+
+        while self.is_match(TokenType::OR) {
+            let operator = self.previous();
+            let right = self.and()?;
+            expr = Expr::Logical(Box::new(expr), operator, Box::new(right));
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Expr, LoxError> {
+        let mut expr = self.equality()?;
+
+        while self.is_match(TokenType::AND) {
+            let operator = self.previous();
+            let right = self.equality()?;
+            expr = Expr::Logical(Box::new(expr), operator, Box::new(right));
         }
 
         Ok(expr)

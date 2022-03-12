@@ -9,6 +9,7 @@ pub enum Expr {
     Unary(UnaryExpr),
     Variable(Token),
     Assignment(AssigmentExpr),
+    Logical(Box<Expr>, Token, Box<Expr>),
 }
 
 #[derive(Debug, PartialEq, Clone)]

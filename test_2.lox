@@ -1,0 +1,37 @@
+// Then branch
+var i = 2;
+{
+    if (i >= 2) {
+        print "i >= 2";
+    } else {
+        print "i < 2";
+    }
+
+}
+
+// Else branch
+var i = 1;
+{
+    if (i >= 2) {
+        print "i >= 2";
+    } else {
+        print "i < 2";
+    }
+}
+
+
+// Nested if
+var i = 0;
+{
+    if (i >= 2) {
+        print "i >= 2";
+    } else {
+        if (i < 1) {
+            print "i < 1";
+        } else {
+            print "i < 2";
+        }
+    }
+}
+
+
