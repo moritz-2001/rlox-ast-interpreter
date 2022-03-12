@@ -1,6 +1,5 @@
 use std::fmt;
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     String(String),
@@ -9,14 +8,12 @@ pub enum Object {
     Nil,
 }
 
-
-
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         return match self {
-            Object::String(s) => write!(f, "String: \"{}\"", s),
-            Object::Number(n) => write!(f, "Number: {}", n),
-            Object::Boolean(b) => write!(f, "Boolean: {}", b),
+            Object::String(s) => write!(f, "\"{}\"", s),
+            Object::Number(n) => write!(f, "{}", n),
+            Object::Boolean(b) => write!(f, "{}", b),
             Object::Nil => write!(f, "NIL"),
         };
     }

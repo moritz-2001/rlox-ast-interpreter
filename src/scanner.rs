@@ -253,11 +253,11 @@ impl Scanner {
     }
 
     fn peek(&self) -> Option<char> {
-        self.source.get(self.current).map(|x| *x)
+        self.source.get(self.current).copied()
     }
 
     fn peek_next(&self) -> Option<char> {
-        self.source.get(self.current + 1).map(|x| *x)
+        self.source.get(self.current + 1).copied()
     }
 
     fn add_token(&mut self, token_type: TokenType) {

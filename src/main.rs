@@ -20,16 +20,18 @@ fn main() -> Result<(), LoxError> {
 
 fn run_prompt() -> Result<(), LoxError> {
     let stdin = io::stdin();
+    let mut code = String::new();
     loop {
         print!("> ");
         io::stdout().flush()?;
         let mut s = String::new();
         stdin.read_line(&mut s)?;
-        if s.is_empty() {
+        code += &s.trim();
+        if s.trim().is_empty() && !code.trim().is_empty(){
             break;
         }
-        run(s)?;
     }
+    run(code)?;
     Ok(())
 }
 
@@ -44,12 +46,15 @@ fn run(input: String) -> Result<(), LoxError> {
     let mut scn = Scanner::new(input);
     scn.scan_tokens()?;
 
-    let mut parser = Parser::new(scn.get_tokens());
-    let expr = parser.parse()?;
+    let tokens = scn.get_tokens();
+    //println!("Tokens: {:?}", tokens);
 
-    let v = Interpreter::interpret(expr)?;
-
-    println!("{}", v);
+    let mut parser = Parser::new(tokens);
+    
+    let statements = parser.parse()?;
+    
+    //println!("Statements: {:?}", statements);
+    Interpreter::interpret(statements)?;
 
     Ok(())
 }

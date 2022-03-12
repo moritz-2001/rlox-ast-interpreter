@@ -1,30 +1,134 @@
 use crate::{
-    expressions::{BinaryExpr, UnaryExpr},
+    expressions::{BinaryExpr, UnaryExpr, AssigmentExpr},
     object::Object,
     tokens::TokenType,
-    Expr, LoxError,
+    Expr, LoxError, Statement, Token,
 };
+use std::{collections::{HashMap, VecDeque}};
 
-pub struct Interpreter;
-
-impl Interpreter {
-    pub fn interpret(expr: Expr) -> Result<Object, LoxError> {
-        Self::eval_expr(expr)
+struct Environment(Vec<HashMap<String, Object>>);
+impl Environment {
+    fn new() -> Self {
+        Self(vec![HashMap::new()])
+    }
+    fn new_scope(&mut self) {
+        self.0.push(HashMap::new());
+    }
+    fn end_scope(&mut self) {
+        self.0.pop().unwrap();
+    }
+    fn define(&mut self, name: String, value: Object) {
+        let _ = self.get_current_scope().insert(name, value);
     }
 
-    fn eval_expr(expr: Expr) -> Result<Object, LoxError> {
-        match expr {
-            Expr::Literal(e) => Ok(e.value),
-            Expr::Grouping(e) => Self::eval_expr(*e.expression),
-            Expr::Unary(e) => Self::unary_expr(e),
-            Expr::Binary(e) => Self::binary_expr(e),
+    fn get_current_scope(&mut self) -> &mut HashMap<String, Object> {
+        let i = self.0.len()-1;
+        self.0.get_mut(i).unwrap()
+    }
 
-            _ => unimplemented!(),
+    fn get(&self, name: String) -> Result<Object, LoxError> {
+        for env in self.0.iter().rev() {
+            if let Some(x) = env.get(&name) {
+                return Ok(x.clone());
+            }
+        }
+        Err(LoxError::UndefinedVariable(format!("Undefined variable '{}'.", name)))
+    }
+
+    fn contains(&self, name: &str) -> bool {
+        for env in self.0.iter().rev() {
+            if env.contains_key(name) {
+                return true
+            }
+        }
+        false
+    }
+}
+
+pub struct Interpreter {
+    statements: Vec<Statement>,
+    current: usize,
+    env: Environment,
+}
+
+impl Interpreter {
+    fn new(statements: Vec<Statement>) -> Self {
+        Interpreter {
+            statements,
+            current: 0,
+            env: Environment::new(),
         }
     }
 
-    fn unary_expr(e: UnaryExpr) -> Result<Object, LoxError> {
-        let right = Self::eval_expr(*e.right)?;
+    pub fn interpret(statements: Vec<Statement>) -> Result<(), LoxError> {
+        let mut interpreter = Self::new(statements);
+        while !interpreter.is_at_end() {
+            interpreter.eval_stmt(interpreter.peek())?;
+            interpreter.advance()?;
+        }
+
+        Ok(())
+    }
+
+
+    fn eval_stmt(&mut self, stmt: Statement) -> Result<(), LoxError> {
+        match stmt {
+            Statement::Expr(e) => {let _ = self.eval_expr(e); Ok(())},
+            Statement::Print(e) => self.eval_print(e),
+            Statement::VarDecl(t, e) => self.var_dec(t, e),
+            Statement::Block(stms) => self.block(stms),
+        }
+    }
+
+    fn block(&mut self, mut stms: VecDeque<Statement>) -> Result<(), LoxError> {
+        self.env.new_scope();
+
+        while !stms.is_empty() {
+            self.eval_stmt(stms.pop_front().unwrap())?;
+        }
+        self.env.end_scope();
+
+        Ok(())
+    }
+
+    fn var_dec(&mut self, t: Token, e: Expr) -> Result<(), LoxError> {
+        let obj = self.eval_expr(e)?;
+        self.env.define(t.lexeme, obj);
+        Ok(())
+    }
+
+    fn eval_print(&mut self, e: Expr) -> Result<(), LoxError> {
+        let val = self.eval_expr(e)?;
+        println!("{}", val);
+        Ok(())
+    }
+
+
+    fn eval_expr(&mut self, expr: Expr) -> Result<Object, LoxError> {
+        match expr {
+            Expr::Literal(e) => Ok(e.value),
+            Expr::Grouping(e) => self.eval_expr(*e.expression),
+            Expr::Unary(e) => self.unary_expr(e),
+            Expr::Binary(e) => self.binary_expr(e),
+            Expr::Variable(t) => self.env.get(t.lexeme),
+            Expr::Assignment(e) => self.assign_expr(e),
+        }
+    }
+
+    fn assign_expr(&mut self, e: AssigmentExpr) -> Result<Object, LoxError> {
+        if self.env.contains(&e.name.lexeme) {
+            let val = self.eval_expr(*e.value)?;
+            self.env.define(e.name.lexeme, val);
+            Ok(Object::Nil)
+        } else {
+            Err(LoxError::Error(format!("Udefined variable '{}'.", e.name.lexeme)))
+        }
+        
+
+    }
+
+    fn unary_expr(&mut self, e: UnaryExpr) -> Result<Object, LoxError> {
+        let right = self.eval_expr(*e.right)?;
 
         if e.operator.token_type == TokenType::MINUS {
             if let Object::Number(n) = right {
@@ -32,12 +136,17 @@ impl Interpreter {
             }
         }
 
+
+        if e.operator.token_type == TokenType::BANG {
+           return Ok(Object::Boolean(!Self::is_truthy(right)));
+        }
+
         unreachable!();
     }
 
-    fn binary_expr(e: BinaryExpr) -> Result<Object, LoxError> {
-        let left = Self::eval_expr(*e.left)?;
-        let right = Self::eval_expr(*e.right)?;
+    fn binary_expr(&mut self, e: BinaryExpr) -> Result<Object, LoxError> {
+        let left = self.eval_expr(*e.left)?;
+        let right = self.eval_expr(*e.right)?;
 
         let get_num = |x| Self::get_v_num(x);
         let get_str = |x| Self::get_v_string(x);
@@ -69,22 +178,22 @@ impl Interpreter {
                 _ => unreachable!(),
             }
         };
-        return Ok(obj);
+        Ok(obj)
     }
 
     fn get_v_num(obj: Object) -> Result<f64, LoxError> {
         if let Object::Number(n) = obj {
-            return Ok(n);
+            Ok(n)
         } else {
-            return Err(LoxError::Error(format!("'{:?}' must be a number.", obj)));
+            Err(LoxError::Error(format!("'{:?}' must be a number.", obj)))
         }
     }
 
     fn get_v_string(obj: Object) -> Result<String, LoxError> {
         if let Object::String(s) = obj {
-            return Ok(s);
+            Ok(s)
         } else {
-            return Err(LoxError::Error(format!("'{:?}' must be a string.", obj)));
+            Err(LoxError::Error(format!("'{:?}' must be a string.", obj)))
         }
     }
 
@@ -96,16 +205,33 @@ impl Interpreter {
             return b;
         };
 
-        return true;
+        true
     }
 
     fn is_equal(a: Object, b: Object) -> bool {
         match (a, b) {
-            (Object::Nil, Object::Nil) => return true,
-            (Object::Boolean(a), Object::Boolean(b)) => return a == b,
-            (Object::Number(a), Object::Number(b)) => return a == b,
-            (Object::String(a), Object::String(b)) => return a == b,
-            _ => return false,
+            (Object::Nil, Object::Nil) => true,
+            (Object::Boolean(a), Object::Boolean(b)) => a == b,
+            (Object::Number(a), Object::Number(b)) => a == b,
+            (Object::String(a), Object::String(b)) => a == b,
+            _ => false,
         }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.current >= self.statements.len()
+    }
+
+    fn advance(&mut self) -> Result<Statement, LoxError> {
+        if let Some(statement) = self.statements.get(self.current) {
+            self.current += 1;
+            Ok(statement.clone())
+        } else {
+            Err(LoxError::Error(format!("Interpreter error: advance not possible")))
+        }
+    }
+
+    fn peek(&self) -> Statement {
+        self.statements.get(self.current).unwrap().clone()
     }
 }

@@ -7,6 +7,14 @@ pub enum Expr {
     Grouping(GroupingExpr),
     Literal(LiteralExpr),
     Unary(UnaryExpr),
+    Variable(Token),
+    Assignment(AssigmentExpr),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct AssigmentExpr {
+    pub name: Token,
+    pub value: Box<Expr>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

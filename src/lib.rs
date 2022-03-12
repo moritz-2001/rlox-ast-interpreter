@@ -18,3 +18,6 @@ pub use crate::parser::Parser;
 
 pub mod interpreter;
 pub use crate::interpreter::Interpreter;
+
+pub mod statements;
+pub use crate::statements::Statement;
