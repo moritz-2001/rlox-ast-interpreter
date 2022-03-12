@@ -10,6 +10,7 @@ pub enum Expr {
     Variable(Token),
     Assignment(AssigmentExpr),
     Logical(Box<Expr>, Token, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 #[derive(Debug, PartialEq, Clone)]

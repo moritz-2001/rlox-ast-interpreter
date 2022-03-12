@@ -1,91 +1,68 @@
+use crate::environment::Environment;
 use crate::{
     expressions::{AssigmentExpr, BinaryExpr, UnaryExpr},
-    object::Object,
+    object::{Function, Object},
     tokens::TokenType,
     Expr, LoxError, Statement, Token,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-struct Environment(Vec<HashMap<String, Object>>);
-impl Environment {
-    fn new() -> Self {
-        Self(vec![HashMap::new()])
-    }
-    fn new_scope(&mut self) {
-        self.0.push(HashMap::new());
-    }
-    fn end_scope(&mut self) {
-        self.0.pop().unwrap();
-    }
-    fn define(&mut self, name: String, value: Object) {
-        self.get_current_scope().insert(name, value);
-    }
-
-    fn assign(&mut self, name: String, value: Object) -> Result<(), LoxError> {
-        for env in self.0.iter_mut().rev() {
-            if env.contains_key(&name) {
-                env.insert(name, value);
-                return Ok(());
-            }
-        }
-        Err(LoxError::UndefinedVariable(format!(
-            "Undefined variable '{}'.",
-            name
-        )))
-    }
-
-    fn get_current_scope(&mut self) -> &mut HashMap<String, Object> {
-        let i = self.0.len() - 1;
-        self.0.get_mut(i).unwrap()
-    }
-
-    fn get(&self, name: String) -> Result<Object, LoxError> {
-        for env in self.0.iter().rev() {
-            if let Some(x) = env.get(&name) {
-                return Ok(x.clone());
-            }
-        }
-        Err(LoxError::UndefinedVariable(format!(
-            "Undefined variable '{}'.",
-            name
-        )))
-    }
-
-    fn contains(&self, name: &str) -> bool {
-        for env in self.0.iter().rev() {
-            if env.contains_key(name) {
-                return true;
-            }
-        }
-        false
-    }
-}
-
+#[derive(Debug, Clone, PartialEq)]
 pub struct Interpreter {
     statements: Vec<Statement>,
     current: usize,
-    env: Environment,
+    pub env: Environment,
     print_log: Vec<Object>,
 }
 
 impl Interpreter {
     fn new(statements: Vec<Statement>) -> Self {
+        let mut env = Environment::new();
+        Self::global_scope(&mut env);
         Interpreter {
             statements,
             current: 0,
-            env: Environment::new(),
+            env,
             print_log: Vec::new(),
         }
     }
 
-    pub fn interpret(statements: Vec<Statement>) -> Result<Vec<Object>, LoxError> {
-        let mut interpreter = Self::new(statements);
-        while !interpreter.is_at_end() {
-            interpreter.eval_stmt(interpreter.peek())?;
-            interpreter.advance()?;
+    fn global_scope(env: &mut Environment) {
+        fn fun(_: Vec<Object>) -> Result<Object, LoxError> {
+            let start = SystemTime::now();
+            let since_the_epoch = start
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards");
+            Ok(Object::Number(since_the_epoch.as_secs_f64()))
         }
 
-        Ok(interpreter.print_log)
+        let f = Function::new(
+            Object::String("clock".to_string()),
+            vec![],
+            0,
+            None,
+            Some(fun),
+        );
+        env.define_global("clock".to_string(), Object::Callable(f));
+    }
+
+    pub fn interpret(statements: Vec<Statement>) -> Result<Object, LoxError> {
+        let mut interpreter = Self::new(statements);
+        interpreter.run()
+      
+    }
+
+    pub fn run(&mut self) -> Result<Object, LoxError> {
+        while !self.is_at_end() {
+            let ret = self.eval_stmt(self.peek());
+            if let Err(LoxError::Return(x)) = ret {
+                return Ok(x);
+            }
+            ret?;
+            self.advance()?;
+        }
+        Ok(Object::Nil)
     }
 
     fn eval_stmt(&mut self, stmt: Statement) -> Result<(), LoxError> {
@@ -99,7 +76,33 @@ impl Interpreter {
             Statement::Block(stms) => self.block(stms),
             Statement::If(cond, then_stm, else_stm) => self.if_stm(cond, *then_stm, else_stm),
             Statement::While(cond, stm) => self.while_stm(cond, *stm),
+            Statement::FuncDecl(name, args, stm) => self.function_decl(name, args, *stm),
+            Statement::Return(e) => self.return_stm(e),
         }
+    }
+
+    fn function_decl(
+        &mut self,
+        name: Token,
+        args: Vec<Token>,
+        stm: Statement,
+    ) -> Result<(), LoxError> {
+        let arity = args.len();
+
+        let mut interpreter = Self::new(vec![stm]);
+        Self::global_scope(&mut interpreter.env);
+
+        let f = Function::new(
+            Object::String(name.lexeme.clone()),
+            args,
+            arity,
+            Some(interpreter),
+            None,
+        );
+
+        self.env.define(name.lexeme.clone(), Object::Callable(f));
+
+        Ok(())
     }
 
     fn while_stm(&mut self, cond: Expr, stm: Statement) -> Result<(), LoxError> {
@@ -107,6 +110,11 @@ impl Interpreter {
             self.eval_stmt(stm.clone())?;
         }
         Ok(())
+    }
+
+    fn return_stm(&mut self, e: Expr) -> Result<(), LoxError> {
+        let val = self.eval_expr(e)?;
+        Err(LoxError::Return(val))
     }
 
     fn block(&mut self, mut stms: VecDeque<Statement>) -> Result<(), LoxError> {
@@ -159,6 +167,7 @@ impl Interpreter {
             Expr::Variable(t) => self.env.get(t.lexeme),
             Expr::Assignment(e) => self.assign_expr(e),
             Expr::Logical(e1, op, e2) => self.logical_expr(*e1, *e2, op),
+            Expr::Call(callee, args) => self.call_expr(*callee, args),
         }
     }
 
@@ -247,6 +256,29 @@ impl Interpreter {
             }
         };
         Ok(obj)
+    }
+
+    fn call_expr(&mut self, callee: Expr, args: Vec<Expr>) -> Result<Object, LoxError> {
+        let callee = self.eval_expr(callee)?;
+
+        let mut arguments = Vec::with_capacity(args.len());
+        for e in args {
+            arguments.push(self.eval_expr(e)?);
+        }
+
+        if let Object::Callable(mut function) = callee {
+            if function.arity != arguments.len() {
+                return Err(LoxError::Error(format!(
+                    "Expected {} arguments but got {}.",
+                    function.arity,
+                    arguments.len()
+                )));
+            }
+            return function.call(arguments);
+        }
+
+        
+        unreachable!();
     }
 
     fn get_v_num(obj: Object) -> Result<f64, LoxError> {

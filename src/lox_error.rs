@@ -1,3 +1,5 @@
+use crate::object::Object;
+
 #[derive(Debug)]
 pub enum LoxError {
     IoError(std::io::Error),
@@ -6,6 +8,7 @@ pub enum LoxError {
     UndefinedVariable(String),
     TokenListEmpty,
     NotExpression,
+    Return(Object),
 }
 
 impl From<std::io::Error> for LoxError {

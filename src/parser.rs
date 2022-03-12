@@ -35,6 +35,8 @@ impl Parser {
         let try_ = {
             if self.is_match(TokenType::VAR) {
                 self.var_declaration()
+            } else if self.is_match(TokenType::FUN) {
+                self.function("function".to_string())
             } else {
                 self.statement()
             }
@@ -48,6 +50,39 @@ impl Parser {
                 self.declaration()
             }
         }
+    }
+
+    fn function(&mut self, kind: String) -> Result<Statement, LoxError> {
+        let name = self.consume(TokenType::IDENTIFIER, &format!("Expect {} name.", kind));
+
+        self.consume(
+            TokenType::LEFT_PAREN,
+            &format!("Expect '(' after {} name.", kind),
+        );
+        let mut parameters = Vec::new();
+        if !self.check(TokenType::RIGHT_PAREN) {
+            loop {
+                if parameters.len() >= 255 {
+                    return Err(LoxError::Error(
+                        "Can't have more than 255 parameters".to_string(),
+                    ));
+                }
+                parameters.push(self.consume(TokenType::IDENTIFIER, "Expect parameter name."));
+
+                if !self.is_match(TokenType::COMMA) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after parameters");
+
+        self.consume(
+            TokenType::LEFT_BRACE,
+            &format!("Expect '{{' before {} body.", kind),
+        );
+        let mut body = self.block_statement()?;
+
+        Ok(Statement::FuncDecl(name, parameters, Box::new(body)))
     }
 
     fn var_declaration(&mut self) -> Result<Statement, LoxError> {
@@ -82,6 +117,9 @@ impl Parser {
         if self.is_match(TokenType::WHILE) {
             return self.while_statement();
         };
+        if self.is_match(TokenType::RETURN) {
+            return self.return_statement();
+        }
 
         self.expression_statement()
     }
@@ -193,6 +231,19 @@ impl Parser {
         let value = self.expression()?;
         self.consume(TokenType::SEMICOLON, "Expect ';' after value.");
         Ok(Statement::Print(value))
+    }
+
+    fn return_statement(&mut self) -> Result<Statement, LoxError> {
+        let stm = {
+            if !self.check(TokenType::SEMICOLON) {
+                Statement::Return(self.expression()?)
+            } else {
+                Statement::Return(Expr::Literal(LiteralExpr{value: Object::Nil}))
+            }
+        };
+
+        self.consume(TokenType::SEMICOLON, "Expect ';' after return value");
+        Ok(stm)
     }
 
     fn expression_statement(&mut self) -> Result<Statement, LoxError> {
@@ -329,7 +380,42 @@ impl Parser {
             }));
         }
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expr, LoxError> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.is_match(TokenType::LEFT_PAREN) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, LoxError> {
+        let mut arguments = Vec::new();
+        if !self.check(TokenType::RIGHT_PAREN) {
+            loop {
+                if arguments.len() >= 255 {
+                    return Err(LoxError::Error(format!(
+                        "Can't have more than 
+                    255 arguments."
+                    )));
+                }
+                arguments.push(self.expression()?);
+                if !self.is_match(TokenType::COMMA) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments");
+
+        Ok(Expr::Call(Box::new(callee), arguments))
     }
 
     fn primary(&mut self) -> Result<Expr, LoxError> {

@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::tokens::Token;
 use crate::Expr;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     VarDecl(Token, Expr),
     Expr(Expr),
@@ -11,5 +11,6 @@ pub enum Statement {
     Block(VecDeque<Statement>),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
-    //For(Option<Box<Statement>>, Option<Box<Statement>>, Box<Statement>),
+    FuncDecl(Token, Vec<Token>, Box<Statement>),
+    Return(Expr),
 }

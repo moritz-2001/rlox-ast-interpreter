@@ -22,4 +22,7 @@ pub use crate::interpreter::Interpreter;
 pub mod statements;
 pub use crate::statements::Statement;
 
+pub mod environment;
+pub use crate::environment::Environment;
+
 mod tests;
