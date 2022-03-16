@@ -1,17 +1,16 @@
 use crate::environment::Environment;
 use crate::{
-    expressions::{AssigmentExpr, BinaryExpr, UnaryExpr},
     object::Object,
     tokens::TokenType,
     Expr, LoxError, Statement, Token,
     callable::{Callable, LoxFunction, Clock},
 };
-use std::collections::VecDeque;
+use std::collections::{VecDeque};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::mem;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Interpreter {
     statements: Vec<Statement>,
     current: usize,
@@ -21,6 +20,8 @@ pub struct Interpreter {
 impl Interpreter {
     fn new(statements: Vec<Statement>) -> Self {
         let mut env = Environment::new();
+        let clock = Clock{};
+        env.define(clock.name(), Object::Callable(Rc::new(Box::new(clock))));
         Interpreter {
             statements,
             current: 0,
@@ -30,8 +31,10 @@ impl Interpreter {
 
     pub fn interpret(statements: Vec<Statement>) -> Result<Object, LoxError> {
         let mut interpreter = Self::new(statements);
+        
         interpreter.run()
     }
+
 
     pub fn run(&mut self) -> Result<Object, LoxError> {
         while !self.is_at_end() {
@@ -130,12 +133,12 @@ impl Interpreter {
 
     fn eval_expr(&mut self, expr: Expr) -> Result<Object, LoxError> {
         match expr {
-            Expr::Literal(e) => Ok(e.value),
-            Expr::Grouping(e) => self.eval_expr(*e.expression),
-            Expr::Unary(e) => self.unary_expr(e),
-            Expr::Binary(e) => self.binary_expr(e),
+            Expr::Literal(o) => Ok(o),
+            Expr::Grouping(e) => self.eval_expr(*e),
+            Expr::Unary(t, e) => self.unary_expr(*e, t),
+            Expr::Binary(e1, t, e2) => self.binary_expr(*e1, *e2, t),
             Expr::Variable(t) => self.env.borrow().get(t.lexeme),
-            Expr::Assignment(e) => self.assign_expr(e),
+            Expr::Assignment(t, e) => self.assign_expr(*e, t),
             Expr::Logical(e1, op, e2) => self.logical_expr(*e1, *e2, op),
             Expr::Call(callee, args) => self.call_expr(*callee, args),
         }
@@ -162,31 +165,31 @@ impl Interpreter {
         }
     }
 
-    fn assign_expr(&mut self, e: AssigmentExpr) -> Result<Object, LoxError> {
-            let val = self.eval_expr(*e.value)?;
-            self.env.borrow_mut().assign(e.name.lexeme, val)?;
+    fn assign_expr(&mut self, e: Expr, t: Token) -> Result<Object, LoxError> {
+            let val = self.eval_expr(e)?;
+            self.env.borrow_mut().assign(t.lexeme, val)?;
             Ok(Object::Nil)
     }
 
-    fn unary_expr(&mut self, e: UnaryExpr) -> Result<Object, LoxError> {
-        let right = self.eval_expr(*e.right)?;
+    fn unary_expr(&mut self, e: Expr, operator: Token) -> Result<Object, LoxError> {
+        let right = self.eval_expr(e)?;
 
-        if e.operator.token_type == TokenType::MINUS {
+        if operator.token_type == TokenType::MINUS {
             if let Object::Number(n) = right {
                 return Ok(Object::Number(n * -1.0));
             }
         }
 
-        if e.operator.token_type == TokenType::BANG {
+        if operator.token_type == TokenType::BANG {
             return Ok(Object::Boolean(!right.is_truthy()));
         }
 
         unreachable!();
     }
 
-    fn binary_expr(&mut self, e: BinaryExpr) -> Result<Object, LoxError> {
-        let left = self.eval_expr(*e.left)?;
-        let right = self.eval_expr(*e.right)?;
+    fn binary_expr(&mut self, left: Expr, right: Expr, operator: Token) -> Result<Object, LoxError> {
+        let left = self.eval_expr(left)?;
+        let right = self.eval_expr(right)?;
 
 
         let is_num = |x: &Object| x.clone().get_v_num().is_ok();
@@ -197,7 +200,7 @@ impl Interpreter {
 
 
         let obj = {
-            match e.operator.token_type {
+            match operator.token_type {
                 TokenType::MINUS => to_num(left.get_v_num()? - right.get_v_num()?),
                 TokenType::SLASH => to_num(left.get_v_num()? / right.get_v_num()?),
                 TokenType::STAR => to_num(left.get_v_num()? * right.get_v_num()?),

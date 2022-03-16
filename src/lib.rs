@@ -28,4 +28,7 @@ pub use crate::environment::Environment;
 pub mod callable;
 pub use crate::callable::Callable;
 
+//pub mod resolver;
+//pub use crate::resolver::Resolver;
+
 mod tests;

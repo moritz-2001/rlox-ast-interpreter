@@ -1,6 +1,6 @@
 use crate::object::Object;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -24,7 +24,7 @@ impl Token {
 
 
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenType {
     // Single-character tokens
     LEFT_PAREN,

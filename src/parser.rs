@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 
-use crate::expressions::{AssigmentExpr, BinaryExpr, GroupingExpr, LiteralExpr, UnaryExpr};
 use crate::lox_error::LoxError;
 use crate::object::Object;
 use crate::statements::Statement;
@@ -88,7 +87,7 @@ impl Parser {
     fn var_declaration(&mut self) -> Result<Statement, LoxError> {
         let name = self.consume(TokenType::IDENTIFIER, "Expect variable name.");
 
-        let mut init = Expr::Literal(LiteralExpr { value: Object::Nil });
+        let mut init = Expr::Literal(Object::Nil);
         if self.is_match(TokenType::EQUAL) {
             init = self.expression()?;
         }
@@ -172,9 +171,7 @@ impl Parser {
                 Statement::While(cond, Box::new(body))
             } else {
                 Statement::While(
-                    Expr::Literal(LiteralExpr {
-                        value: Object::Boolean(true),
-                    }),
+                    Expr::Literal(Object::Boolean(true),),
                     Box::new(body),
                 )
             }
@@ -238,7 +235,7 @@ impl Parser {
             if !self.check(TokenType::SEMICOLON) {
                 Statement::Return(self.expression()?)
             } else {
-                Statement::Return(Expr::Literal(LiteralExpr{value: Object::Nil}))
+                Statement::Return(Expr::Literal(Object::Nil))
             }
         };
 
@@ -264,10 +261,7 @@ impl Parser {
             let val = self.assignment()?;
 
             if let Expr::Variable(name) = expr {
-                return Ok(Expr::Assignment(AssigmentExpr {
-                    name,
-                    value: Box::new(val),
-                }));
+                return Ok(Expr::Assignment(name, Box::new(val)));
             }
 
             return Err(LoxError::ParsingError(format!(
@@ -308,11 +302,7 @@ impl Parser {
         while self.verify(vec![TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL]) {
             let op = self.previous();
             let right = self.comparison()?;
-            expr = Expr::Binary(BinaryExpr {
-                left: Box::new(expr),
-                operator: op,
-                right: Box::new(right),
-            });
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
 
         Ok(expr)
@@ -329,11 +319,7 @@ impl Parser {
         ]) {
             let op = self.previous();
             let right = self.term()?;
-            expr = Expr::Binary(BinaryExpr {
-                left: Box::new(expr),
-                operator: op,
-                right: Box::new(right),
-            })
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
 
         Ok(expr)
@@ -345,11 +331,7 @@ impl Parser {
         while self.verify(vec![TokenType::MINUS, TokenType::PLUS]) {
             let op = self.previous();
             let right = self.factor()?;
-            expr = Expr::Binary(BinaryExpr {
-                left: Box::new(expr),
-                operator: op,
-                right: Box::new(right),
-            })
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
         return Ok(expr);
     }
@@ -360,11 +342,7 @@ impl Parser {
         while self.verify(vec![TokenType::SLASH, TokenType::STAR]) {
             let op = self.previous();
             let right = self.unary()?;
-            expr = Expr::Binary(BinaryExpr {
-                left: Box::new(expr),
-                operator: op,
-                right: Box::new(right),
-            });
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
 
         Ok(expr)
@@ -374,10 +352,7 @@ impl Parser {
         if self.verify(vec![TokenType::BANG, TokenType::MINUS]) {
             let op = self.previous();
             let right = self.unary()?;
-            return Ok(Expr::Unary(UnaryExpr {
-                operator: op,
-                right: Box::new(right),
-            }));
+            return Ok(Expr::Unary(op, Box::new(right)));
         }
 
         self.call()
@@ -420,31 +395,23 @@ impl Parser {
 
     fn primary(&mut self) -> Result<Expr, LoxError> {
         if self.is_match(TokenType::FALSE) {
-            return Ok(Expr::Literal(LiteralExpr {
-                value: Object::Boolean(false),
-            }));
+            return Ok(Expr::Literal(Object::Boolean(false)));
         };
         if self.is_match(TokenType::TRUE) {
-            return Ok(Expr::Literal(LiteralExpr {
-                value: Object::Boolean(true),
-            }));
+            return Ok(Expr::Literal(Object::Boolean(true)));
         };
         if self.is_match(TokenType::NIL) {
-            return Ok(Expr::Literal(LiteralExpr { value: Object::Nil }));
+            return Ok(Expr::Literal(Object::Nil));
         };
 
         if self.verify(vec![TokenType::NUMBER, TokenType::STRING]) {
-            return Ok(Expr::Literal(LiteralExpr {
-                value: self.previous().literal.unwrap(),
-            }));
+            return Ok(Expr::Literal(self.previous().literal.unwrap()));
         }
 
         if self.is_match(TokenType::LEFT_PAREN) {
             let expr = self.expression()?;
             self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression.");
-            return Ok(Expr::Grouping(GroupingExpr {
-                expression: Box::new(expr),
-            }));
+            return Ok(Expr::Grouping(Box::new(expr)));
         }
 
         if self.is_match(TokenType::IDENTIFIER) {
