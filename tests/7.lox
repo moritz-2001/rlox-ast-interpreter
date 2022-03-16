@@ -1,0 +1,10 @@
+fun test(i) {
+    if (i <= 0) {
+        return 0;
+    } else {
+        print "check";
+        return test(i-1);
+    }
+}
+
+test(2);

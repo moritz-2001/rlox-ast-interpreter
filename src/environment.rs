@@ -1,63 +1,60 @@
 use crate::{object::Object, LoxError};
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
+
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Environment(Vec<HashMap<String, Object>>);
+pub struct Environment {
+    values: HashMap<String, Object>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
+}
+
+
 impl Environment {
     pub fn new() -> Self {
-        Self(vec![HashMap::new(), HashMap::new()])
+        Self {
+            values: HashMap::new(),
+            enclosing: None, 
+        }
     }
-    pub fn new_scope(&mut self) {
-        self.0.push(HashMap::new());
+
+    pub fn new_with_enclosing(enclosing: Rc<RefCell<Environment>>) -> Self {
+        Self {
+            values: HashMap::new(),
+            enclosing: Some(enclosing),
+        }
     }
-    pub fn end_scope(&mut self) {
-        self.0.pop().unwrap();
-    }
+
     pub fn define(&mut self, name: String, value: Object) {
-        self.get_current_scope().insert(name, value);
+        self.values.insert(name, value);
+    }
+
+
+    pub fn get(&self, name: String) -> Result<Object, LoxError> {
+        if let Some(x) = self.values.get(&name) {
+            Ok(x.clone())
+        } else if let Some(env) = &self.enclosing {
+            env.borrow().get(name)
+        } else {
+            Err(LoxError::UndefinedVariable(format!(
+                "Undefined variable '{}'.",
+                name
+            )))
+        }
     }
 
     pub fn assign(&mut self, name: String, value: Object) -> Result<(), LoxError> {
-        for env in self.0.iter_mut().rev() {
-            if env.contains_key(&name) {
-                env.insert(name, value);
-                return Ok(());
-            }
+        if self.values.contains_key(&name) {
+            self.values.insert(name, value);
+            Ok(())
+        } else if let Some(env) = &self.enclosing {
+            env.borrow_mut().assign(name, value)
+        } else {
+            Err(LoxError::UndefinedVariable(format!(
+                "Undefined variable '{}'.",
+                name
+            )))
         }
-        Err(LoxError::UndefinedVariable(format!(
-            "Undefined variable '{}'.",
-            name
-        )))
-    }
-
-    pub fn get_current_scope(&mut self) -> &mut HashMap<String, Object> {
-        let i = self.0.len() - 1;
-        self.0.get_mut(i).unwrap()
-    }
-
-    pub fn get(&self, name: String) -> Result<Object, LoxError> {
-        for env in self.0.iter().rev() {
-            if let Some(x) = env.get(&name) {
-                return Ok(x.clone());
-            }
-        }
-
-        Err(LoxError::UndefinedVariable(format!(
-            "Undefined variable '{}'.",
-            name
-        )))
-    }
-
-    pub fn contains(&self, name: &str) -> bool {
-        for env in self.0.iter().rev() {
-            if env.contains_key(name) {
-                return true;
-            }
-        }
-        false
-    }
-
-    pub fn define_global(&mut self, name: String, value: Object) {
-        self.0[0].insert(name, value);
     }
 }

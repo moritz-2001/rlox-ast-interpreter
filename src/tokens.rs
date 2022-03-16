@@ -22,6 +22,8 @@ impl Token {
     }
 }
 
+
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum TokenType {
     // Single-character tokens

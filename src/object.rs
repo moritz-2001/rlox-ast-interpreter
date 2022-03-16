@@ -1,6 +1,8 @@
 use std::fmt;
+use crate::callable::Callable;
+use std::rc::Rc;
 
-use crate::{interpreter::Interpreter, LoxError, Token};
+use crate::LoxError;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
@@ -8,7 +10,7 @@ pub enum Object {
     Number(f64),
     Boolean(bool),
     Nil,
-    Callable(Function),
+    Callable(Rc<Box<dyn Callable>>),
 }
 
 impl fmt::Display for Object {
@@ -23,45 +25,43 @@ impl fmt::Display for Object {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Function {
-    name: Box<Object>,
-    pub args: Vec<Token>,
-    pub arity: usize,
-    pub interpreter: Option<Interpreter>,
-    native_function: Option<fn(Vec<Object>) -> Result<Object, LoxError>>,
-}
+impl Object {
+    pub fn is_truthy(&self) -> bool {
+        if *self == Object::Nil {
+            return false;
+        }
+        if let Object::Boolean(b) = self {
+            return *b;
+        };
 
-impl Function {
-    pub fn new(
-        name: Object,
-        args: Vec<Token>,
-        arity: usize,
-        interpreter: Option<Interpreter>,
-        native_fn: Option<fn(Vec<Object>) -> Result<Object, LoxError>>,
-    ) -> Self {
-        Self {
-            name: Box::new(name),
-            args,
-            arity,
-            interpreter,
-            native_function: native_fn,
+        true
+    }
+
+    pub fn is_equal(a: Object, b: Object) -> bool {
+        match (a, b) {
+            (Object::Nil, Object::Nil) => true,
+            (Object::Boolean(a), Object::Boolean(b)) => a == b,
+            (Object::Number(a), Object::Number(b)) => a == b,
+            (Object::String(a), Object::String(b)) => a == b,
+            _ => false,
         }
     }
 
-    pub fn call(&mut self, args: Vec<Object>) -> Result<Object, LoxError> {
-        if let Some(fun) = self.native_function {
-            return Ok(fun(args)?);
+    pub fn get_v_num(&self) -> Result<f64, LoxError> {
+        if let Object::Number(n) = self {
+            Ok(*n)
+        } else {
+            Err(LoxError::Error(format!("'{:?}' must be a number.", self)))
         }
-
-        let mut int = self.interpreter.take().unwrap();
-        self.interpreter = Some(int.clone());
-
-        for (i, v) in args.into_iter().enumerate() {
-            int.env.define(self.args.get(i).unwrap().lexeme.clone(), v);
-        }
-         
-
-        Ok(int.run()?)
     }
+
+    pub fn get_v_string(&self) -> Result<String, LoxError> {
+        if let Object::String(s) = self {
+            Ok(s.clone())
+        } else {
+            Err(LoxError::Error(format!("'{:?}' must be a string.", self)))
+        }
+    }
+
 }
+

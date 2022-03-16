@@ -3,5 +3,6 @@ fun sayHi(first, last) {
 }
 
 var x = sayHi("Dear", "Reader");
+print "test";
 print x;
-return x;
+//return x;

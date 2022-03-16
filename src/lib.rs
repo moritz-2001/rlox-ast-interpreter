@@ -25,4 +25,7 @@ pub use crate::statements::Statement;
 pub mod environment;
 pub use crate::environment::Environment;
 
+pub mod callable;
+pub use crate::callable::Callable;
+
 mod tests;

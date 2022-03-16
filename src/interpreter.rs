@@ -1,56 +1,36 @@
 use crate::environment::Environment;
 use crate::{
     expressions::{AssigmentExpr, BinaryExpr, UnaryExpr},
-    object::{Function, Object},
+    object::Object,
     tokens::TokenType,
     Expr, LoxError, Statement, Token,
+    callable::{Callable, LoxFunction, Clock},
 };
 use std::collections::VecDeque;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::mem;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Interpreter {
     statements: Vec<Statement>,
     current: usize,
-    pub env: Environment,
-    print_log: Vec<Object>,
+    env: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     fn new(statements: Vec<Statement>) -> Self {
         let mut env = Environment::new();
-        Self::global_scope(&mut env);
         Interpreter {
             statements,
             current: 0,
-            env,
-            print_log: Vec::new(),
+            env: Rc::new(RefCell::new(env)),
         }
-    }
-
-    fn global_scope(env: &mut Environment) {
-        fn fun(_: Vec<Object>) -> Result<Object, LoxError> {
-            let start = SystemTime::now();
-            let since_the_epoch = start
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards");
-            Ok(Object::Number(since_the_epoch.as_secs_f64()))
-        }
-
-        let f = Function::new(
-            Object::String("clock".to_string()),
-            vec![],
-            0,
-            None,
-            Some(fun),
-        );
-        env.define_global("clock".to_string(), Object::Callable(f));
     }
 
     pub fn interpret(statements: Vec<Statement>) -> Result<Object, LoxError> {
         let mut interpreter = Self::new(statements);
         interpreter.run()
-      
     }
 
     pub fn run(&mut self) -> Result<Object, LoxError> {
@@ -64,6 +44,7 @@ impl Interpreter {
         }
         Ok(Object::Nil)
     }
+
 
     fn eval_stmt(&mut self, stmt: Statement) -> Result<(), LoxError> {
         match stmt {
@@ -81,32 +62,23 @@ impl Interpreter {
         }
     }
 
-    fn function_decl(
-        &mut self,
-        name: Token,
-        args: Vec<Token>,
-        stm: Statement,
-    ) -> Result<(), LoxError> {
-        let arity = args.len();
-
-        let mut interpreter = Self::new(vec![stm]);
-        Self::global_scope(&mut interpreter.env);
-
-        let f = Function::new(
-            Object::String(name.lexeme.clone()),
+    fn function_decl(&mut self, name: Token, args: Vec<Token>, stm: Statement) -> Result<(), LoxError> {
+       
+        let f = LoxFunction::new(
+            name.clone(),
             args,
-            arity,
-            Some(interpreter),
-            None,
+            stm,
+            self.env.clone()
         );
+        
 
-        self.env.define(name.lexeme.clone(), Object::Callable(f));
+        self.env.borrow_mut().define(name.lexeme.clone(), Object::Callable(Rc::new(Box::new(f))));
 
         Ok(())
     }
 
     fn while_stm(&mut self, cond: Expr, stm: Statement) -> Result<(), LoxError> {
-        while Self::is_truthy(self.eval_expr(cond.clone())?) {
+        while (self.eval_expr(cond.clone())?).is_truthy() {
             self.eval_stmt(stm.clone())?;
         }
         Ok(())
@@ -117,24 +89,23 @@ impl Interpreter {
         Err(LoxError::Return(val))
     }
 
-    fn block(&mut self, mut stms: VecDeque<Statement>) -> Result<(), LoxError> {
-        self.env.new_scope();
-
-        while !stms.is_empty() {
-            self.eval_stmt(stms.pop_front().unwrap())?;
-        }
-        self.env.end_scope();
-
-        Ok(())
+    fn block(&mut self, stms: VecDeque<Statement>) -> Result<(), LoxError> {
+        let new_env = Environment::new_with_enclosing(self.env.clone());
+        let vec_stms: Vec<Statement> = stms.into_iter().collect();
+        self.exec_block(&vec_stms, new_env)
     }
 
-    fn if_stm(
-        &mut self,
-        cond: Expr,
-        then_stm: Statement,
-        else_stm: Option<Box<Statement>>,
-    ) -> Result<(), LoxError> {
-        if Self::is_truthy(self.eval_expr(cond)?) {
+    pub fn exec_block(&mut self, stms: &[Statement], new_env: Environment) -> Result<(), LoxError> {
+        let previous_env = mem::replace(&mut self.env, Rc::new(RefCell::new(new_env)));
+        let res = stms.iter().try_for_each(|stm| self.eval_stmt(stm.clone()));
+        self.env = previous_env;
+
+
+        res
+    }
+
+    fn if_stm(&mut self, cond: Expr, then_stm: Statement, else_stm: Option<Box<Statement>> ) -> Result<(), LoxError> {
+        if (self.eval_expr(cond)?).is_truthy() {
             self.eval_stmt(then_stm)?;
         } else {
             if let Some(else_stm) = else_stm {
@@ -147,14 +118,13 @@ impl Interpreter {
 
     fn var_dec(&mut self, t: Token, e: Expr) -> Result<(), LoxError> {
         let obj = self.eval_expr(e)?;
-        self.env.define(t.lexeme, obj);
+        self.env.borrow_mut().define(t.lexeme, obj);
         Ok(())
     }
 
     fn eval_print(&mut self, e: Expr) -> Result<(), LoxError> {
         let val = self.eval_expr(e)?;
         println!("{}", val);
-        self.print_log.push(val);
         Ok(())
     }
 
@@ -164,7 +134,7 @@ impl Interpreter {
             Expr::Grouping(e) => self.eval_expr(*e.expression),
             Expr::Unary(e) => self.unary_expr(e),
             Expr::Binary(e) => self.binary_expr(e),
-            Expr::Variable(t) => self.env.get(t.lexeme),
+            Expr::Variable(t) => self.env.borrow().get(t.lexeme),
             Expr::Assignment(e) => self.assign_expr(e),
             Expr::Logical(e1, op, e2) => self.logical_expr(*e1, *e2, op),
             Expr::Call(callee, args) => self.call_expr(*callee, args),
@@ -175,14 +145,14 @@ impl Interpreter {
         let left = self.eval_expr(e1)?;
         match op.token_type {
             TokenType::AND => {
-                if Self::is_truthy(left.clone()) {
+                if left.clone().is_truthy() {
                     Ok(self.eval_expr(e2)?)
                 } else {
                     Ok(left)
                 }
             }
             TokenType::OR => {
-                if Self::is_truthy(left.clone()) {
+                if left.clone().is_truthy() {
                     Ok(left)
                 } else {
                     Ok(self.eval_expr(e2)?)
@@ -193,16 +163,9 @@ impl Interpreter {
     }
 
     fn assign_expr(&mut self, e: AssigmentExpr) -> Result<Object, LoxError> {
-        if self.env.contains(&e.name.lexeme) {
             let val = self.eval_expr(*e.value)?;
-            self.env.assign(e.name.lexeme, val)?;
+            self.env.borrow_mut().assign(e.name.lexeme, val)?;
             Ok(Object::Nil)
-        } else {
-            Err(LoxError::Error(format!(
-                "Udefined variable '{}'.",
-                e.name.lexeme
-            )))
-        }
     }
 
     fn unary_expr(&mut self, e: UnaryExpr) -> Result<Object, LoxError> {
@@ -215,7 +178,7 @@ impl Interpreter {
         }
 
         if e.operator.token_type == TokenType::BANG {
-            return Ok(Object::Boolean(!Self::is_truthy(right)));
+            return Ok(Object::Boolean(!right.is_truthy()));
         }
 
         unreachable!();
@@ -225,33 +188,32 @@ impl Interpreter {
         let left = self.eval_expr(*e.left)?;
         let right = self.eval_expr(*e.right)?;
 
-        let get_num = |x| Self::get_v_num(x);
-        let get_str = |x| Self::get_v_string(x);
 
-        let is_num = |x: &Object| get_num(x.clone()).is_ok();
+        let is_num = |x: &Object| x.clone().get_v_num().is_ok();
 
         let to_num = |n| Object::Number(n);
         let to_str = |s| Object::String(s);
         let to_bool = |b| Object::Boolean(b);
 
+
         let obj = {
             match e.operator.token_type {
-                TokenType::MINUS => to_num(get_num(left)? - get_num(right)?),
-                TokenType::SLASH => to_num(get_num(left)? / get_num(right)?),
-                TokenType::STAR => to_num(get_num(left)? * get_num(right)?),
+                TokenType::MINUS => to_num(left.get_v_num()? - right.get_v_num()?),
+                TokenType::SLASH => to_num(left.get_v_num()? / right.get_v_num()?),
+                TokenType::STAR => to_num(left.get_v_num()? * right.get_v_num()?),
                 TokenType::PLUS => {
                     if is_num(&left) && is_num(&right) {
-                        to_num(get_num(left)? + get_num(right)?)
+                        to_num(left.get_v_num()? + right.get_v_num()?)
                     } else {
-                        to_str(get_str(left)? + &get_str(right)?)
+                        to_str(left.get_v_string()? + &right.get_v_string()?)
                     }
                 }
-                TokenType::GREATER => to_bool(get_num(left)? > get_num(right)?),
-                TokenType::GREATER_EQUAL => to_bool(get_num(left)? >= get_num(right)?),
-                TokenType::LESS => to_bool(get_num(left)? < get_num(right)?),
-                TokenType::LESS_EQUAL => to_bool(get_num(left)? <= get_num(right)?),
-                TokenType::BANG_EQUAL => to_bool(!Self::is_equal(left, right)),
-                TokenType::EQUAL_EQUAL => to_bool(Self::is_equal(left, right)),
+                TokenType::GREATER => to_bool(left.get_v_num()? > right.get_v_num()?),
+                TokenType::GREATER_EQUAL => to_bool(left.get_v_num()? >= right.get_v_num()?),
+                TokenType::LESS => to_bool(left.get_v_num()? < right.get_v_num()?),
+                TokenType::LESS_EQUAL => to_bool(left.get_v_num()? <= right.get_v_num()?),
+                TokenType::BANG_EQUAL => to_bool(!Object::is_equal(left, right)),
+                TokenType::EQUAL_EQUAL => to_bool(Object::is_equal(left, right)),
                 _ => unreachable!(),
             }
         };
@@ -266,58 +228,26 @@ impl Interpreter {
             arguments.push(self.eval_expr(e)?);
         }
 
-        if let Object::Callable(mut function) = callee {
-            if function.arity != arguments.len() {
+        if let Object::Callable(function) = callee {
+            if function.arity() != arguments.len() {
                 return Err(LoxError::Error(format!(
                     "Expected {} arguments but got {}.",
-                    function.arity,
+                    function.arity(),
                     arguments.len()
                 )));
             }
-            return function.call(arguments);
+            return function.call(self, &arguments);
         }
 
         
         unreachable!();
     }
 
-    fn get_v_num(obj: Object) -> Result<f64, LoxError> {
-        if let Object::Number(n) = obj {
-            Ok(n)
-        } else {
-            Err(LoxError::Error(format!("'{:?}' must be a number.", obj)))
-        }
-    }
 
-    fn get_v_string(obj: Object) -> Result<String, LoxError> {
-        if let Object::String(s) = obj {
-            Ok(s)
-        } else {
-            Err(LoxError::Error(format!("'{:?}' must be a string.", obj)))
-        }
-    }
+}
 
-    fn is_truthy(obj: Object) -> bool {
-        if obj == Object::Nil {
-            return false;
-        }
-        if let Object::Boolean(b) = obj {
-            return b;
-        };
 
-        true
-    }
-
-    fn is_equal(a: Object, b: Object) -> bool {
-        match (a, b) {
-            (Object::Nil, Object::Nil) => true,
-            (Object::Boolean(a), Object::Boolean(b)) => a == b,
-            (Object::Number(a), Object::Number(b)) => a == b,
-            (Object::String(a), Object::String(b)) => a == b,
-            _ => false,
-        }
-    }
-
+impl Interpreter {
     fn is_at_end(&self) -> bool {
         self.current >= self.statements.len()
     }
