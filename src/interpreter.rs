@@ -1,9 +1,11 @@
 use crate::environment::Environment;
+use crate::expressions::Var;
 use crate::{
     object::Object,
     tokens::TokenType,
     Expr, LoxError, Statement, Token,
     callable::{Callable, LoxFunction, Clock},
+    resolver::Resolver,
 };
 use std::collections::{VecDeque};
 use std::rc::Rc;
@@ -31,7 +33,7 @@ impl Interpreter {
 
     pub fn interpret(statements: Vec<Statement>) -> Result<Object, LoxError> {
         let mut interpreter = Self::new(statements);
-        
+        Resolver::run(&mut interpreter.statements);
         interpreter.run()
     }
 
@@ -137,8 +139,8 @@ impl Interpreter {
             Expr::Grouping(e) => self.eval_expr(*e),
             Expr::Unary(t, e) => self.unary_expr(*e, t),
             Expr::Binary(e1, t, e2) => self.binary_expr(*e1, *e2, t),
-            Expr::Variable(t) => self.env.borrow().get(t.lexeme),
-            Expr::Assignment(t, e) => self.assign_expr(*e, t),
+            Expr::Variable(var) => self.env.borrow_mut().get_at(var),
+            Expr::Assignment(var, e) => self.assign_expr(*e, var),
             Expr::Logical(e1, op, e2) => self.logical_expr(*e1, *e2, op),
             Expr::Call(callee, args) => self.call_expr(*callee, args),
         }
@@ -165,10 +167,11 @@ impl Interpreter {
         }
     }
 
-    fn assign_expr(&mut self, e: Expr, t: Token) -> Result<Object, LoxError> {
-            let val = self.eval_expr(e)?;
-            self.env.borrow_mut().assign(t.lexeme, val)?;
-            Ok(Object::Nil)
+    fn assign_expr(&mut self, e: Expr, var: Var) -> Result<Object, LoxError> {
+        let val = self.eval_expr(e)?;
+
+        self.env.borrow_mut().assign_at(var, val)?;
+        Ok(Object::Nil)
     }
 
     fn unary_expr(&mut self, e: Expr, operator: Token) -> Result<Object, LoxError> {

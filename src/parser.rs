@@ -4,7 +4,7 @@ use crate::lox_error::LoxError;
 use crate::object::Object;
 use crate::statements::Statement;
 use crate::tokens::{Token, TokenType};
-use crate::Expr;
+use crate::expressions::{Expr, Var};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -415,7 +415,7 @@ impl Parser {
         }
 
         if self.is_match(TokenType::IDENTIFIER) {
-            return Ok(Expr::Variable(self.previous()));
+            return Ok(Expr::Variable(Var::new(self.previous())));
         }
 
         Err(LoxError::NotExpression)

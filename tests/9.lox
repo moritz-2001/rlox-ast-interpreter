@@ -1,0 +1,12 @@
+var x = 1;
+var y = 2;
+var temp;
+
+{
+    temp = x;
+    x = 12;
+    {
+        print x+y;
+    }
+
+}
