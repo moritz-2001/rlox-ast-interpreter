@@ -6,8 +6,9 @@ use crate::{
     Expr, LoxError, Statement, Token,
     callable::{Callable, LoxFunction, Clock},
     resolver::Resolver,
+    class::LoxClass,
 };
-use std::collections::{VecDeque};
+use std::collections::{VecDeque, HashMap};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::mem;
@@ -64,21 +65,47 @@ impl Interpreter {
             Statement::While(cond, stm) => self.while_stm(cond, *stm),
             Statement::FuncDecl(name, args, stm) => self.function_decl(name, args, *stm),
             Statement::Return(e) => self.return_stm(e),
+            Statement::ClassDecl(name, methods) => self.class_decl(name, methods),
         }
     }
 
     fn function_decl(&mut self, name: Token, args: Vec<Token>, stm: Statement) -> Result<(), LoxError> {
-       
         let f = LoxFunction::new(
             name.clone(),
             args,
             stm,
-            self.env.clone()
+            self.env.clone(),
+            false
         );
         
 
         self.env.borrow_mut().define(name.lexeme.clone(), Object::Callable(Rc::new(Box::new(f))));
 
+        Ok(())
+    }
+
+    fn class_decl(&mut self, name: Token, methods: Vec<Statement>) -> Result<(), LoxError> {
+        self.env.borrow_mut().define(name.lexeme.clone(), Object::Nil);
+        
+        let mut method_map = HashMap::with_capacity(methods.len());
+        
+        for method in methods {
+            if let Statement::FuncDecl(name, args, body ) = method {
+                let f = LoxFunction::new(
+                    name.clone(),
+                    args,
+                    *body,
+                    self.env.clone(),
+                    name.to_string() == "init"
+                );
+                method_map.insert(name.lexeme, f);
+            } else {
+                panic!("error class_decl");
+            }
+        }
+        
+        let class = LoxClass::new(name.lexeme.clone(), method_map);
+        self.env.borrow_mut().assign(name.lexeme.clone(), Object::Callable(Rc::new(Box::new(class))))?;
         Ok(())
     }
 
@@ -139,11 +166,44 @@ impl Interpreter {
             Expr::Grouping(e) => self.eval_expr(*e),
             Expr::Unary(t, e) => self.unary_expr(*e, t),
             Expr::Binary(e1, t, e2) => self.binary_expr(*e1, *e2, t),
-            Expr::Variable(var) => self.env.borrow_mut().get_at(var),
+            Expr::Variable(var) => {
+                self.env.borrow_mut().get_at(var)
+            },
             Expr::Assignment(var, e) => self.assign_expr(*e, var),
             Expr::Logical(e1, op, e2) => self.logical_expr(*e1, *e2, op),
             Expr::Call(callee, args) => self.call_expr(*callee, args),
+            Expr::Get(e, name) => self.get_expr(*e, name),
+            Expr::Set(e1, name, e2) => self.set_expr(*e1, *e2, name),
+            Expr::This(var) => {
+                self.env.borrow_mut().get_at(var)
+            },
         }
+    }
+
+    fn get_expr(&mut self, e: Expr, name: Token) -> Result<Object, LoxError> {
+        let object = self.eval_expr(e)?;
+        if let Object::Instance(instance) = &object {
+            return instance.get(&name);
+        }
+        Err(LoxError::Error(format!("{} is not a instance", object)))
+    }
+
+    fn set_expr(&mut self, e1: Expr, e2: Expr, name: Token) -> Result<Object, LoxError> {
+        let value = self.eval_expr(e1)?;
+        let (mut instance, var) = {
+            if let Expr::Variable(var) = e2 {
+            (self.env.borrow_mut().get_at(var.clone())?, var.clone())
+            } else {
+                return Err(LoxError::Error(format!("err")));
+            }
+        };
+
+        if let Object::Instance(lox_instance) = &mut instance {
+            lox_instance.set(&name, value.clone())?;
+            self.env.borrow_mut().assign(var.name().to_string(), instance)?;
+            return Ok(value);
+        }
+        Err(LoxError::Error(format!("{} is not a instance", value)))
     }
 
     fn logical_expr(&mut self, e1: Expr, e2: Expr, op: Token) -> Result<Object, LoxError> {

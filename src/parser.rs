@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use crate::lox_error::LoxError;
 use crate::object::Object;
+use crate::resolver::ClassType;
 use crate::statements::Statement;
 use crate::tokens::{Token, TokenType};
 use crate::expressions::{Expr, Var};
@@ -119,6 +120,9 @@ impl Parser {
         if self.is_match(TokenType::RETURN) {
             return self.return_statement();
         }
+        if self.is_match(TokenType::CLASS) {
+            return self.class_statement();
+        }
 
         self.expression_statement()
     }
@@ -187,6 +191,21 @@ impl Parser {
                 Ok(while_stm)
             }
         };
+    }
+
+    fn class_statement(&mut self) -> Result<Statement, LoxError> {
+        let name = self.consume(TokenType::IDENTIFIER, "Expect class name.");
+        self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body.");
+
+        let mut methods: Vec<Statement> = Vec::new();
+        
+        while !self.check(TokenType::RIGHT_BRACE) && !self.is_at_end() {
+            methods.push(self.function("method".to_string())?);
+        }
+
+        self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.");
+
+        Ok(Statement::ClassDecl(name, methods))
     }
 
     fn while_statement(&mut self) -> Result<Statement, LoxError> {
@@ -262,6 +281,8 @@ impl Parser {
 
             if let Expr::Variable(name) = expr {
                 return Ok(Expr::Assignment(name, Box::new(val)));
+            } else if let Expr::Get(e, n) = expr {
+                return Ok(Expr::Set(Box::new(val), n, e));
             }
 
             return Err(LoxError::ParsingError(format!(
@@ -364,6 +385,9 @@ impl Parser {
         loop {
             if self.is_match(TokenType::LEFT_PAREN) {
                 expr = self.finish_call(expr)?;
+            } else if self.is_match(TokenType::DOT) {           
+                let name = self.consume(TokenType::IDENTIFIER, "Expect property name after '.'.");
+                expr = Expr::Get(Box::new(expr), name);
             } else {
                 break;
             }
@@ -416,6 +440,10 @@ impl Parser {
 
         if self.is_match(TokenType::IDENTIFIER) {
             return Ok(Expr::Variable(Var::new(self.previous())));
+        }
+
+        if self.is_match(TokenType::THIS) {
+            return Ok(Expr::This(Var::new(self.previous())));
         }
 
         Err(LoxError::NotExpression)

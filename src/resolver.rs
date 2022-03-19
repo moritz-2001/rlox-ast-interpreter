@@ -1,3 +1,4 @@
+use crate::class;
 use crate::statements::Statement;
 use crate::tokens::Token;
 use crate::expressions::{Expr, Var};
@@ -5,15 +6,34 @@ use crate::expressions::{Expr, Var};
 use std::collections::HashMap;
 
 
+#[derive(Debug, Clone, PartialEq)]
+enum FunctionType {
+    None,
+    Function,
+    Method,
+    Initializer,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClassType {
+    None,
+    Class
+}
+
+
+
+
 #[derive(Debug)]
 pub struct Resolver {
     scopes: Vec<HashMap<String, bool>>,
+    current_class: ClassType,
+    current_function: FunctionType,
 }
 
 
 impl Resolver {
     pub fn run(stms: &mut [Statement]) {
-        let mut resolver = Resolver{scopes:vec![HashMap::new()]};
+        let mut resolver = Resolver{scopes:vec![HashMap::new()], current_class: ClassType::None, current_function: FunctionType::None};
         for stm in stms {
             resolver.resolve_stmt(stm);
         }
@@ -54,11 +74,41 @@ impl Resolver {
                 self.resolve_exp(e);
             },
             Statement::Return(e) => {
+                if self.current_function == FunctionType::Initializer {
+                    panic!("Cant't return a value from an initializer.");
+                }
                 self.resolve_exp(e);
             },
             Statement::While(e, body) => {
                 self.resolve_exp(e);
                 self.resolve_stmt(body);
+            },
+            Statement::ClassDecl(name, methods) => {
+                let enclosing_class = self.current_class.clone();
+                self.current_class = ClassType::Class;
+
+                self.declare(name);
+                self.define(name);
+
+                self.begin_scope();
+                self.scopes.last_mut().unwrap().insert("this".to_string(), true);
+
+                for method in methods {
+                    let declaration = self.current_function.clone();
+                    self.current_function = FunctionType::Method;
+                    if let Statement::FuncDecl(name, args, body) = method {
+                        if name.to_string() == "init" {
+                            self.current_function = FunctionType::Initializer;
+                        }
+                        self.resolve_function(name, args, body);
+                        self.current_function = declaration; 
+                    } else {
+                        panic!("Resolver error ClassDecl");
+                    }
+                }
+
+                self.end_scope();
+                self.current_class = enclosing_class;
             }
         }
     }
@@ -98,6 +148,19 @@ impl Resolver {
                     }
                 }
                 self.resolve_var(var);
+            },
+            Expr::Get(e, name) => {
+                self.resolve_exp(e);
+            },
+            Expr::Set(e1, name, e2) => {
+                self.resolve_exp(e1);
+                self.resolve_exp(e2);
+            },
+            Expr::This(keyword) => {
+                if self.current_class == ClassType::None {
+                    panic!("Can't use 'this' outside of a class.");
+                }
+                self.resolve_var(keyword);
             }
         }
     }

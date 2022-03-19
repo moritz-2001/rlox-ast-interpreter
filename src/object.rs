@@ -3,6 +3,7 @@ use crate::callable::Callable;
 use std::rc::Rc;
 
 use crate::LoxError;
+use crate::class::{LoxInstance};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
@@ -11,6 +12,7 @@ pub enum Object {
     Boolean(bool),
     Nil,
     Callable(Rc<Box<dyn Callable>>),
+    Instance(LoxInstance),
 }
 
 impl fmt::Display for Object {
@@ -20,7 +22,8 @@ impl fmt::Display for Object {
             Object::Number(n) => write!(f, "{}", n),
             Object::Boolean(b) => write!(f, "{}", b),
             Object::Nil => write!(f, "NIL"),
-            Object::Callable(o) => write!(f, "ERR"),
+            Object::Callable(o) => write!(f, "{}", o),
+            Object::Instance(c) => write!(f, "{}", c.to_string()),
         };
     }
 }
