@@ -1,2 +1,3 @@
 # Lox Tree-Walk Interpreter 
-https://craftinginterpreters.com/contents.html
+I implemented a tree-walk interpreter for Lox in Rust.
+- https://craftinginterpreters.com/contents.html
