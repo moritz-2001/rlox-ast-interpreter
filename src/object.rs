@@ -1,9 +1,9 @@
-use std::fmt;
 use crate::callable::Callable;
+use std::fmt;
 use std::rc::Rc;
 
+use crate::class::LoxInstance;
 use crate::LoxError;
-use crate::class::{LoxInstance};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
@@ -65,6 +65,4 @@ impl Object {
             Err(LoxError::Error(format!("'{:?}' must be a string.", self)))
         }
     }
-
 }
-

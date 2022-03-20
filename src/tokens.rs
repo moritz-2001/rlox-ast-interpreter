@@ -28,8 +28,6 @@ impl ToString for Token {
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenType {
     // Single-character tokens

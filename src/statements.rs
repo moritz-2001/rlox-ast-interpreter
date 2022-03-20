@@ -1,8 +1,6 @@
-use std::collections::VecDeque;
-
-use crate::resolver::ClassType;
 use crate::tokens::Token;
 use crate::Expr;
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {

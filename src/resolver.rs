@@ -1,10 +1,9 @@
 use crate::class;
+use crate::expressions::{Expr, Var};
 use crate::statements::Statement;
 use crate::tokens::Token;
-use crate::expressions::{Expr, Var};
 
 use std::collections::HashMap;
-
 
 #[derive(Debug, Clone, PartialEq)]
 enum FunctionType {
@@ -17,11 +16,8 @@ enum FunctionType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClassType {
     None,
-    Class
+    Class,
 }
-
-
-
 
 #[derive(Debug)]
 pub struct Resolver {
@@ -30,10 +26,13 @@ pub struct Resolver {
     current_function: FunctionType,
 }
 
-
 impl Resolver {
     pub fn run(stms: &mut [Statement]) {
-        let mut resolver = Resolver{scopes:vec![HashMap::new()], current_class: ClassType::None, current_function: FunctionType::None};
+        let mut resolver = Resolver {
+            scopes: vec![HashMap::new()],
+            current_class: ClassType::None,
+            current_function: FunctionType::None,
+        };
         for stm in stms {
             resolver.resolve_stmt(stm);
         }
@@ -49,40 +48,40 @@ impl Resolver {
                     self.resolve_stmt(stm);
                 }
                 self.end_scope();
-            },
+            }
             Statement::VarDecl(token, exp) => {
                 self.declare(token);
                 self.resolve_exp(exp);
                 self.define(token);
-            },
+            }
             Statement::FuncDecl(name, args, body) => {
                 self.declare(name);
                 self.define(name);
                 self.resolve_function(name, args, body);
-            },
+            }
             Statement::Expr(e) => {
                 self.resolve_exp(e);
-            },
+            }
             Statement::If(e, stmt1, stmt2) => {
                 self.resolve_exp(e);
                 self.resolve_stmt(stmt1);
                 if let Some(stm) = stmt2 {
                     self.resolve_stmt(stm);
                 }
-            },
+            }
             Statement::Print(e) => {
                 self.resolve_exp(e);
-            },
+            }
             Statement::Return(e) => {
                 if self.current_function == FunctionType::Initializer {
                     panic!("Cant't return a value from an initializer.");
                 }
                 self.resolve_exp(e);
-            },
+            }
             Statement::While(e, body) => {
                 self.resolve_exp(e);
                 self.resolve_stmt(body);
-            },
+            }
             Statement::ClassDecl(name, methods) => {
                 let enclosing_class = self.current_class.clone();
                 self.current_class = ClassType::Class;
@@ -91,7 +90,10 @@ impl Resolver {
                 self.define(name);
 
                 self.begin_scope();
-                self.scopes.last_mut().unwrap().insert("this".to_string(), true);
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert("this".to_string(), true);
 
                 for method in methods {
                     let declaration = self.current_function.clone();
@@ -101,7 +103,7 @@ impl Resolver {
                             self.current_function = FunctionType::Initializer;
                         }
                         self.resolve_function(name, args, body);
-                        self.current_function = declaration; 
+                        self.current_function = declaration;
                     } else {
                         panic!("Resolver error ClassDecl");
                     }
@@ -113,49 +115,51 @@ impl Resolver {
         }
     }
 
-
     fn resolve_exp(&mut self, exp: &mut Expr) {
         match exp {
             Expr::Binary(e1, t, e2) => {
                 self.resolve_exp(e1);
                 self.resolve_exp(e2);
-            },
+            }
             Expr::Call(e, vec_e) => {
                 self.resolve_exp(e);
                 for e1 in vec_e {
                     self.resolve_exp(e1);
                 }
-            },
+            }
             Expr::Grouping(e) => {
                 self.resolve_exp(e);
-            },
-            Expr::Literal(o) => {},
+            }
+            Expr::Literal(o) => {}
             Expr::Logical(e1, t, e2) => {
                 self.resolve_exp(e1);
                 self.resolve_exp(e2);
-            },
+            }
             Expr::Unary(t, e) => {
                 self.resolve_exp(e);
-            },
+            }
             Expr::Assignment(var, e) => {
                 self.resolve_exp(e);
                 self.resolve_var(var)
-            },
+            }
             Expr::Variable(var) => {
                 if let Some(b) = self.scopes.last().unwrap().get(var.name()) {
                     if *b == false {
-                        panic!("Cant't read local variable in its own initializer. {}", var.name());
+                        panic!(
+                            "Cant't read local variable in its own initializer. {}",
+                            var.name()
+                        );
                     }
                 }
                 self.resolve_var(var);
-            },
+            }
             Expr::Get(e, name) => {
                 self.resolve_exp(e);
-            },
+            }
             Expr::Set(e1, name, e2) => {
                 self.resolve_exp(e1);
                 self.resolve_exp(e2);
-            },
+            }
             Expr::This(keyword) => {
                 if self.current_class == ClassType::None {
                     panic!("Can't use 'this' outside of a class.");
@@ -165,9 +169,6 @@ impl Resolver {
         }
     }
 }
-
-
-
 
 impl Resolver {
     fn resolve_var(&mut self, var: &mut Var) {
@@ -180,9 +181,12 @@ impl Resolver {
         var.hops = self.scopes.len();
     }
 
-
-
-    fn resolve_function(&mut self, name: &mut Token, args: &mut [Token], body: &mut Box<Statement>) {
+    fn resolve_function(
+        &mut self,
+        name: &mut Token,
+        args: &mut [Token],
+        body: &mut Box<Statement>,
+    ) {
         self.begin_scope();
         for param in args {
             self.declare(param);
@@ -200,7 +204,6 @@ impl Resolver {
         self.scopes.pop().unwrap();
     }
 
-
     fn declare(&mut self, name: &Token) {
         if self.scopes.is_empty() {
             return;
@@ -214,6 +217,9 @@ impl Resolver {
         if self.scopes.is_empty() {
             return;
         }
-        self.scopes.last_mut().unwrap().insert(name.lexeme.clone(), true);
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.lexeme.clone(), true);
     }
 }

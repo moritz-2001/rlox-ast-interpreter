@@ -1,24 +1,21 @@
 use crate::class::LoxInstance;
-use crate::expressions::Var;
-use crate::object::Object;
-use crate::lox_error::LoxError;
-use crate::interpreter::Interpreter;
 use crate::environment::Environment;
-use crate::tokens::{Token, TokenType};
+use crate::expressions::Var;
+use crate::interpreter::Interpreter;
+use crate::lox_error::LoxError;
+use crate::object::Object;
 use crate::statements::Statement;
-use std::fmt;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::rc::Rc;
+use crate::tokens::{Token, TokenType};
 use std::cell::RefCell;
+use std::fmt;
+use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-
-
-pub trait Callable: fmt::Debug  {
+pub trait Callable: fmt::Debug {
     fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, LoxError>;
     fn arity(&self) -> usize;
     fn name(&self) -> String;
 }
-
 
 impl fmt::Display for dyn Callable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -32,15 +29,15 @@ impl PartialEq for dyn Callable {
     }
 }
 
-
 #[derive(Debug)]
 pub struct Clock;
-
 
 impl Callable for Clock {
     fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, LoxError> {
         let start = SystemTime::now();
-        Ok(Object::Number(start.duration_since(UNIX_EPOCH).unwrap().as_secs_f64()))
+        Ok(Object::Number(
+            start.duration_since(UNIX_EPOCH).unwrap().as_secs_f64(),
+        ))
     }
     fn arity(&self) -> usize {
         0
@@ -50,18 +47,23 @@ impl Callable for Clock {
     }
 }
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct LoxFunction {
     name: Token,
     paras: Vec<Token>,
     body: Statement,
-    env: Rc<RefCell<Environment>>,
+    env: Environment,
     is_init: bool,
 }
 
 impl LoxFunction {
-    pub fn new(name: Token, paras: Vec<Token>, body: Statement, env: Rc<RefCell<Environment>>, is_init: bool) -> Self {
+    pub fn new(
+        name: Token,
+        paras: Vec<Token>,
+        body: Statement,
+        env: Environment,
+        is_init: bool,
+    ) -> Self {
         Self {
             name,
             paras,
@@ -72,16 +74,22 @@ impl LoxFunction {
     }
 
     pub fn bind(&self, instance: &LoxInstance) -> LoxFunction {
-        let mut env = Environment::new_with_enclosing(Rc::clone(&self.env));
+        let mut env = Environment::new_with_enclosing(&self.env);
         env.define("this".to_string(), Object::Instance(instance.clone()));
 
-        LoxFunction::new(self.name.clone(), self.paras.clone(), self.body.clone(), Rc::new(RefCell::new(env)), self.is_init)
+        LoxFunction::new(
+            self.name.clone(),
+            self.paras.clone(),
+            self.body.clone(),
+            env,
+            self.is_init,
+        )
     }
 }
 
 impl Callable for LoxFunction {
     fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, LoxError> {
-        let mut env = Environment::new_with_enclosing(Rc::clone(&self.env));
+        let mut env = Environment::new_with_enclosing(&self.env);
         for (param, arg) in self.paras.iter().zip(args) {
             env.define(param.lexeme.clone(), arg.clone());
         }
@@ -89,11 +97,13 @@ impl Callable for LoxFunction {
             Ok(o)
         } else {
             if self.is_init {
-                self.env.borrow_mut().get_at(Var { 
-                    identifier: Token::new(TokenType::IDENTIFIER, 
-                        "this".to_string(), 
-                        None, 
-                        0), hops: 0 })
+                Ok(self
+                    .env
+                    .get_at(&Var {
+                        identifier: Token::new(TokenType::IDENTIFIER, "this".to_string(), None, 0),
+                        hops: 0,
+                    })?
+                    .clone())
             } else {
                 Ok(Object::Nil)
             }
@@ -105,4 +115,4 @@ impl Callable for LoxFunction {
     fn name(&self) -> String {
         self.name.lexeme.clone()
     }
-}   
+}

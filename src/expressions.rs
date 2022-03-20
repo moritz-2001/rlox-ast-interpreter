@@ -1,5 +1,5 @@
 use crate::object::Object;
-use crate::tokens::Token;
+use crate::tokens::{Token, TokenType};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -16,7 +16,6 @@ pub enum Expr {
     This(Var),
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Var {
     pub identifier: Token,
@@ -32,5 +31,12 @@ impl Var {
     }
     pub fn name(&self) -> &str {
         &self.identifier.lexeme
+    }
+
+    pub fn new_wo_token(name: &str, hops: usize) -> Self {
+        Self {
+            identifier: Token::new(TokenType::IDENTIFIER, name, None, 0),
+            hops,
+        }
     }
 }

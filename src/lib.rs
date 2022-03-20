@@ -33,5 +33,3 @@ pub use crate::resolver::Resolver;
 
 pub mod class;
 pub use crate::class::LoxClass;
-
-mod tests;

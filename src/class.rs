@@ -1,13 +1,12 @@
-use crate::Environment;
 use crate::callable::{Callable, LoxFunction};
-use crate::lox_error::LoxError;
-use crate::object::Object;
 use crate::interpreter::Interpreter;
+use crate::lox_error::LoxError;
 use crate::tokens::Token;
+use crate::Environment;
+use crate::Object;
 
 use std::collections::HashMap;
 use std::rc::Rc;
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LoxClass {
@@ -17,17 +16,13 @@ pub struct LoxClass {
 
 impl LoxClass {
     pub fn new(name: String, methods: HashMap<String, LoxFunction>) -> Self {
-        Self {
-            name,
-            methods
-        }
+        Self { name, methods }
     }
 
     fn find_method(&self, name: &str) -> Option<&LoxFunction> {
-        self.methods.get(name) 
-    }   
+        self.methods.get(name)
+    }
 }
-
 
 impl Callable for LoxClass {
     fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, LoxError> {
@@ -48,19 +43,17 @@ impl Callable for LoxClass {
     }
 }
 
-
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct LoxInstance {
     class: LoxClass,
-    fields: HashMap<String, Object>
+    fields: HashMap<String, Object>,
 }
 
 impl LoxInstance {
     pub fn new(class: LoxClass) -> Self {
         Self {
             class,
-            fields: HashMap::new()
+            fields: HashMap::new(),
         }
     }
 
@@ -70,7 +63,10 @@ impl LoxInstance {
         } else if let Some(o) = self.class.methods.get(&name.lexeme) {
             Ok(Object::Callable(Rc::new(Box::new(o.bind(self)))))
         } else {
-            Err(LoxError::Error(format!("Undefined property '{}'.", name.lexeme)))
+            Err(LoxError::Error(format!(
+                "Undefined property '{}'.",
+                name.lexeme
+            )))
         }
     }
 
@@ -78,9 +74,7 @@ impl LoxInstance {
         self.fields.insert(name.lexeme.clone(), value);
         Ok(())
     }
-
 }
-
 
 impl ToString for LoxInstance {
     fn to_string(&self) -> String {
