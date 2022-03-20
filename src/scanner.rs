@@ -229,7 +229,7 @@ impl Scanner {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn is_alpha<T>(c: T) -> bool
@@ -242,14 +242,14 @@ impl Scanner {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn is_ascii_alphanumeric(c: Option<char>) -> bool {
         if let Some(c) = c {
             return Self::is_alpha(c) || c.is_ascii_digit();
         }
-        return false;
+        false
     }
 
     fn peek(&self) -> Option<char> {

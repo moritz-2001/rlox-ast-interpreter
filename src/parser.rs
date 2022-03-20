@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use crate::expressions::{Expr, Var};
 use crate::lox_error::LoxError;
 use crate::object::Object;
-use crate::resolver::ClassType;
 use crate::statements::Statement;
 use crate::tokens::{Token, TokenType};
 
@@ -43,7 +42,7 @@ impl Parser {
         };
 
         match try_ {
-            Ok(stmt) => return Ok(stmt),
+            Ok(stmt) => Ok(stmt),
             _ => {
                 println!("Sync: {:?}, {:?}", try_, self.tokens[self.current]);
                 self.synchronize()?;
@@ -80,7 +79,7 @@ impl Parser {
             TokenType::LEFT_BRACE,
             &format!("Expect '{{' before {} body.", kind),
         );
-        let mut body = self.block_statement()?;
+        let body = self.block_statement()?;
 
         Ok(Statement::FuncDecl(name, parameters, Box::new(body)))
     }
@@ -178,20 +177,25 @@ impl Parser {
             }
         };
 
-        return {
-            if let Some(init) = initializer {
-                let mut deque = VecDeque::with_capacity(2);
-                deque.push_back(init);
-                deque.push_back(while_stm);
-                Ok(Statement::Block(deque))
-            } else {
-                Ok(while_stm)
-            }
-        };
+        if let Some(init) = initializer {
+            let mut deque = VecDeque::with_capacity(2);
+            deque.push_back(init);
+            deque.push_back(while_stm);
+            Ok(Statement::Block(deque))
+        } else {
+            Ok(while_stm)
+        }
     }
 
     fn class_statement(&mut self) -> Result<Statement, LoxError> {
         let name = self.consume(TokenType::IDENTIFIER, "Expect class name.");
+
+        let mut superclass = None;
+        if self.is_match(TokenType::LESS) {
+            self.consume(TokenType::IDENTIFIER, "Expect superclass name.");
+            superclass = Some(self.previous());
+        }
+
         self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body.");
 
         let mut methods: Vec<Statement> = Vec::new();
@@ -202,7 +206,15 @@ impl Parser {
 
         self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.");
 
-        Ok(Statement::ClassDecl(name, methods))
+        if let Some(superclass) = superclass {
+            Ok(Statement::ClassDecl(
+                name,
+                Some(Var::new(superclass)),
+                methods,
+            ))
+        } else {
+            Ok(Statement::ClassDecl(name, None, methods))
+        }
     }
 
     fn while_statement(&mut self) -> Result<Statement, LoxError> {
@@ -273,7 +285,7 @@ impl Parser {
         let expr = self.or()?;
 
         if self.is_match(TokenType::EQUAL) {
-            let equals = self.previous();
+            let _equals = self.previous();
             let val = self.assignment()?;
 
             if let Expr::Variable(name) = expr {
@@ -282,9 +294,9 @@ impl Parser {
                 return Ok(Expr::Set(Box::new(val), n, e));
             }
 
-            return Err(LoxError::ParsingError(format!(
-                "Invalid assignment target."
-            )));
+            return Err(LoxError::ParsingError(
+                "Invalid assignment target.".to_string(),
+            ));
         }
 
         Ok(expr)
@@ -351,7 +363,7 @@ impl Parser {
             let right = self.factor()?;
             expr = Expr::Binary(Box::new(expr), op, Box::new(right));
         }
-        return Ok(expr);
+        Ok(expr)
     }
 
     fn factor(&mut self) -> Result<Expr, LoxError> {
@@ -398,10 +410,11 @@ impl Parser {
         if !self.check(TokenType::RIGHT_PAREN) {
             loop {
                 if arguments.len() >= 255 {
-                    return Err(LoxError::Error(format!(
+                    return Err(LoxError::Error(
                         "Can't have more than 
                     255 arguments."
-                    )));
+                            .to_string(),
+                    ));
                 }
                 arguments.push(self.expression()?);
                 if !self.is_match(TokenType::COMMA) {
@@ -443,17 +456,24 @@ impl Parser {
             return Ok(Expr::This(Var::new(self.previous())));
         }
 
+        if self.is_match(TokenType::SUPER) {
+            let keyword = self.previous();
+            self.consume(TokenType::DOT, "Expect '.' after 'super'.");
+            let method = self.consume(TokenType::IDENTIFIER, "Expect superclass method name.");
+            return Ok(Expr::Super(Var::new(keyword), method));
+        }
+
         Err(LoxError::NotExpression)
     }
 
     fn synchronize(&mut self) -> Result<(), LoxError> {
-        if let None = self.advance() {
+        if self.advance().is_none() {
             return Err(LoxError::TokenListEmpty);
         }
 
         while !self.is_at_end() {
             if self.previous().token_type == TokenType::SEMICOLON {
-                return Err(LoxError::Error(format!("Sync")));
+                return Err(LoxError::Error("Sync".to_string()));
             };
 
             match self.peek().unwrap().token_type {
@@ -470,7 +490,7 @@ impl Parser {
 
             self.advance();
         }
-        Err(LoxError::Error(format!("Sync")))
+        Err(LoxError::Error("Sync".to_string()))
     }
 
     fn is_at_end(&self) -> bool {
@@ -516,11 +536,7 @@ impl Parser {
     }
 
     fn check(&self, t: TokenType) -> bool {
-        if self.tokens.get(self.current).unwrap().token_type == t {
-            true
-        } else {
-            false
-        }
+        self.tokens.get(self.current).unwrap().token_type == t
     }
 
     fn peek(&self) -> Option<Token> {

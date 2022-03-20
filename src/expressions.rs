@@ -14,6 +14,7 @@ pub enum Expr {
     Get(Box<Expr>, Token),
     Set(Box<Expr>, Token, Box<Expr>),
     This(Var),
+    Super(Var, Token),
 }
 
 #[derive(Debug, Clone, PartialEq)]

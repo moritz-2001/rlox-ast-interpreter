@@ -6,9 +6,7 @@ use crate::lox_error::LoxError;
 use crate::object::Object;
 use crate::statements::Statement;
 use crate::tokens::{Token, TokenType};
-use std::cell::RefCell;
 use std::fmt;
-use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub trait Callable: fmt::Debug {
@@ -95,18 +93,13 @@ impl Callable for LoxFunction {
         }
         if let Err(LoxError::Return(o)) = interpreter.exec_block(&vec![self.body.clone()], env) {
             Ok(o)
+        } else if self.is_init {
+            Ok(self.env.get_at(&Var {
+                identifier: Token::new(TokenType::IDENTIFIER, "this".to_string(), None, 0),
+                hops: 0,
+            })?)
         } else {
-            if self.is_init {
-                Ok(self
-                    .env
-                    .get_at(&Var {
-                        identifier: Token::new(TokenType::IDENTIFIER, "this".to_string(), None, 0),
-                        hops: 0,
-                    })?
-                    .clone())
-            } else {
-                Ok(Object::Nil)
-            }
+            Ok(Object::Nil)
         }
     }
     fn arity(&self) -> usize {

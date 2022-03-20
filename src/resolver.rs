@@ -80,12 +80,25 @@ impl Resolver {
                 self.resolve_exp(e);
                 self.resolve_stmt(body);
             }
-            Statement::ClassDecl(name, methods) => {
+            Statement::ClassDecl(name, superclass, methods) => {
                 let enclosing_class = self.current_class.clone();
                 self.current_class = ClassType::Class;
 
                 self.declare(name);
                 self.define(name);
+
+                if let Some(superclass) = superclass {
+                    if superclass.name() == name.lexeme {
+                        panic!("A class can't inherit from itself");
+                    }
+                    self.resolve_var(superclass);
+
+                    self.begin_scope();
+                    self.scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert(superclass.name().to_string(), true);
+                }
 
                 self.begin_scope();
                 self.scopes
@@ -108,6 +121,10 @@ impl Resolver {
                 }
 
                 self.end_scope();
+
+                if superclass.is_some() {
+                    self.end_scope()
+                }
                 self.current_class = enclosing_class;
             }
         }
@@ -115,7 +132,7 @@ impl Resolver {
 
     fn resolve_exp(&mut self, exp: &mut Expr) {
         match exp {
-            Expr::Binary(e1, t, e2) => {
+            Expr::Binary(e1, _t, e2) => {
                 self.resolve_exp(e1);
                 self.resolve_exp(e2);
             }
@@ -128,12 +145,12 @@ impl Resolver {
             Expr::Grouping(e) => {
                 self.resolve_exp(e);
             }
-            Expr::Literal(o) => {}
-            Expr::Logical(e1, t, e2) => {
+            Expr::Literal(_o) => {}
+            Expr::Logical(e1, _t, e2) => {
                 self.resolve_exp(e1);
                 self.resolve_exp(e2);
             }
-            Expr::Unary(t, e) => {
+            Expr::Unary(_t, e) => {
                 self.resolve_exp(e);
             }
             Expr::Assignment(var, e) => {
@@ -142,7 +159,7 @@ impl Resolver {
             }
             Expr::Variable(var) => {
                 if let Some(b) = self.scopes.last().unwrap().get(var.name()) {
-                    if *b == false {
+                    if !(*b) {
                         panic!(
                             "Cant't read local variable in its own initializer. {}",
                             var.name()
@@ -151,10 +168,10 @@ impl Resolver {
                 }
                 self.resolve_var(var);
             }
-            Expr::Get(e, name) => {
+            Expr::Get(e, _name) => {
                 self.resolve_exp(e);
             }
-            Expr::Set(e1, name, e2) => {
+            Expr::Set(e1, _name, e2) => {
                 self.resolve_exp(e1);
                 self.resolve_exp(e2);
             }
@@ -163,6 +180,9 @@ impl Resolver {
                     panic!("Can't use 'this' outside of a class.");
                 }
                 self.resolve_var(keyword);
+            }
+            Expr::Super(var, _method) => {
+                self.resolve_var(var);
             }
         }
     }
@@ -181,7 +201,7 @@ impl Resolver {
 
     fn resolve_function(
         &mut self,
-        name: &mut Token,
+        _name: &mut Token,
         args: &mut [Token],
         body: &mut Box<Statement>,
     ) {

@@ -2,7 +2,6 @@ use crate::callable::{Callable, LoxFunction};
 use crate::interpreter::Interpreter;
 use crate::lox_error::LoxError;
 use crate::tokens::Token;
-use crate::Environment;
 use crate::Object;
 
 use std::collections::HashMap;
@@ -12,20 +11,35 @@ use std::rc::Rc;
 pub struct LoxClass {
     name: String,
     methods: HashMap<String, LoxFunction>,
+    super_class: Option<Box<LoxClass>>,
 }
 
 impl LoxClass {
-    pub fn new(name: String, methods: HashMap<String, LoxFunction>) -> Self {
-        Self { name, methods }
+    pub fn new(
+        name: String,
+        super_class: Option<LoxClass>,
+        methods: HashMap<String, LoxFunction>,
+    ) -> Self {
+        Self {
+            name,
+            methods,
+            super_class: super_class.map(Box::new),
+        }
     }
 
-    fn find_method(&self, name: &str) -> Option<&LoxFunction> {
-        self.methods.get(name)
+    pub fn find_method(&self, name: &str) -> Option<&LoxFunction> {
+        if let Some(method) = self.methods.get(name) {
+            Some(method)
+        } else if let Some(superclass) = &self.super_class {
+            superclass.find_method(name)
+        } else {
+            None
+        }
     }
 }
 
 impl Callable for LoxClass {
-    fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, LoxError> {
+    fn call(&self, _interpreter: &mut Interpreter, _args: &[Object]) -> Result<Object, LoxError> {
         let instance = LoxInstance::new(self.clone());
         Ok(Object::Instance(instance))
     }
@@ -60,7 +74,7 @@ impl LoxInstance {
     pub fn get(&self, name: &Token) -> Result<Object, LoxError> {
         if let Some(o) = self.fields.get(&name.lexeme) {
             Ok(o.clone())
-        } else if let Some(o) = self.class.methods.get(&name.lexeme) {
+        } else if let Some(o) = self.class.find_method(&name.lexeme) {
             Ok(Object::Callable(Rc::new(Box::new(o.bind(self)))))
         } else {
             Err(LoxError::Error(format!(
@@ -78,6 +92,6 @@ impl LoxInstance {
 
 impl ToString for LoxInstance {
     fn to_string(&self) -> String {
-        format!("{} instance", self.class.name())
+        self.class.name()
     }
 }

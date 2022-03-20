@@ -28,6 +28,7 @@ impl ToString for Token {
     }
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenType {
     // Single-character tokens

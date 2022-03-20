@@ -1,8 +1,8 @@
 use std::io::{self, Write};
-use Rlox::parser::Parser;
-use Rlox::scanner::Scanner;
-use Rlox::Interpreter;
-use Rlox::LoxError;
+use rlox::parser::Parser;
+use rlox::scanner::Scanner;
+use rlox::Interpreter;
+use rlox::LoxError;
 
 fn main() -> Result<(), LoxError> {
     let args: Vec<String> = std::env::args().collect();
@@ -26,7 +26,7 @@ fn run_prompt() -> Result<(), LoxError> {
         io::stdout().flush()?;
         let mut s = String::new();
         stdin.read_line(&mut s)?;
-        code += &s.trim();
+        code += s.trim();
         if s.trim().is_empty() && !code.trim().is_empty() {
             break;
         }
