@@ -4,6 +4,7 @@ use crate::lox_error::LoxError;
 use crate::tokens::Token;
 use crate::Object;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -39,8 +40,11 @@ impl LoxClass {
 }
 
 impl Callable for LoxClass {
-    fn call(&self, _interpreter: &mut Interpreter, _args: &[Object]) -> Result<Object, LoxError> {
+    fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, LoxError> {
         let instance = LoxInstance::new(self.clone());
+        if let Some(initializer) = self.find_method("init") {
+            initializer.bind(instance.clone()).call(interpreter, args)?;
+        }
         Ok(Object::Instance(instance))
     }
 
@@ -59,23 +63,34 @@ impl Callable for LoxClass {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LoxInstance {
+    inner: Rc<RefCell<InnerLoxInstance>>,
+}
+
+
+#[derive(Debug, PartialEq, Clone)]
+struct InnerLoxInstance {
     class: LoxClass,
     fields: HashMap<String, Object>,
 }
 
+
 impl LoxInstance {
     pub fn new(class: LoxClass) -> Self {
         Self {
-            class,
-            fields: HashMap::new(),
+            inner: Rc::new(RefCell::new(
+                InnerLoxInstance {
+                    class,
+                    fields: HashMap::new(),
+                }
+            ))
         }
     }
 
     pub fn get(&self, name: &Token) -> Result<Object, LoxError> {
-        if let Some(o) = self.fields.get(&name.lexeme) {
+        if let Some(o) = self.inner.borrow().fields.get(&name.lexeme) {
             Ok(o.clone())
-        } else if let Some(o) = self.class.find_method(&name.lexeme) {
-            Ok(Object::Callable(Rc::new(Box::new(o.bind(self)))))
+        } else if let Some(o) = self.inner.borrow().class.find_method(&name.lexeme) {
+            Ok(Object::Callable(Rc::new(Box::new(o.bind(self.clone())))))
         } else {
             Err(LoxError::Error(format!(
                 "Undefined property '{}'.",
@@ -85,13 +100,13 @@ impl LoxInstance {
     }
 
     pub fn set(&mut self, name: &Token, value: Object) -> Result<(), LoxError> {
-        self.fields.insert(name.lexeme.clone(), value);
+        self.inner.borrow_mut().fields.insert(name.lexeme.clone(), value);
         Ok(())
     }
 }
 
 impl ToString for LoxInstance {
     fn to_string(&self) -> String {
-        self.class.name()
+        self.inner.borrow().class.name()
     }
 }

@@ -1,4 +1,5 @@
 use crate::callable::Callable;
+use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
@@ -24,7 +25,7 @@ impl fmt::Display for Object {
             Object::Boolean(b) => write!(f, "{}", b),
             Object::Nil => write!(f, "NIL"),
             Object::Callable(o) => write!(f, "{}", o),
-            Object::Instance(c) => write!(f, "Instance <{}>", c.to_string()),
+            Object::Instance(c) => write!(f, "Instance <{:?}>", c),
             Object::Class(c) => write!(f, "Class <{}>", c.name()),
         };
     }

@@ -34,6 +34,17 @@ impl Environment {
         }
     }
 
+    // Debug
+    pub fn get_keys(&self) -> Vec<String> {
+        let env = self.inner.borrow();
+
+        let mut v : Vec<_> = env.values.keys().map(|x| x.clone()).collect();
+        if let Some(env) = env.enclosing.clone() {
+            v.append(&mut env.get_keys());
+        }
+        v.clone()
+    }
+
     pub fn define(&mut self, name: String, value: Object) {
         self.inner.borrow_mut().values.insert(name, value);
     }
@@ -45,8 +56,8 @@ impl Environment {
             env.get(name)
         } else {
             Err(LoxError::UndefinedVariable(format!(
-                "Undefined variable '{}'.",
-                name
+                "Undefined variable '{}' in env with keys {:?}.",
+                name, self.inner.borrow().values.keys()
             )))
         }
     }

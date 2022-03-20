@@ -1,8 +1,0 @@
-fun sayHi(first, last) {
-    return "Hi, " + first + " " + last + "!";
-}
-
-var x = sayHi("Dear", "Reader");
-print "test";
-print x;
-//return x;

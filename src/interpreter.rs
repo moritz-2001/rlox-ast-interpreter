@@ -41,7 +41,6 @@ impl Interpreter {
     pub fn run(&mut self) -> Result<Object, LoxError> {
         while !self.is_at_end() {
             let ret = self.eval_stmt(self.peek());
-
             match ret {
                 Err(LoxError::Return(x)) => return Ok(x),
                 Err(e) => {
@@ -166,10 +165,12 @@ impl Interpreter {
     }
 
     pub fn exec_block(&mut self, stms: &[Statement], new_env: Environment) -> Result<(), LoxError> {
-        let previous_env = mem::replace(&mut self.env, new_env);
-        let res = stms.iter().try_for_each(|stm| self.eval_stmt(stm.clone()));
-        self.env = previous_env;
+        let previous_env = self.env.clone();
+        self.env = new_env;
 
+        let res = stms.iter().try_for_each(|stm| self.eval_stmt(stm.clone()));
+
+        self.env = previous_env;
         res
     }
 
@@ -201,12 +202,20 @@ impl Interpreter {
     }
 
     fn eval_expr(&mut self, expr: &Expr) -> Result<Object, LoxError> {
-        match expr {
+         match expr {
             Expr::Literal(o) => Ok(o.clone()),
             Expr::Grouping(e) => self.eval_expr(e.as_ref()),
             Expr::Unary(t, e) => self.unary_expr(e.as_ref(), t),
             Expr::Binary(e1, t, e2) => self.binary_expr(e1.as_ref(), e2.as_ref(), t),
-            Expr::Variable(var) => Ok(self.env.get_at(var)?),
+            Expr::Variable(var) => {
+                let res = self.env.get_at(var);
+                
+                if let Ok(o) = res {
+                    Ok(o)
+                } else {
+                    Err(LoxError::NotExpression)
+                }
+            }
             Expr::Assignment(var, e) => self.assign_expr(e.as_ref(), var),
             Expr::Logical(e1, op, e2) => self.logical_expr(e1.as_ref(), e2.as_ref(), op),
             Expr::Call(callee, args) => self.call_expr(callee.as_ref(), args),
@@ -220,7 +229,7 @@ impl Interpreter {
                     let method = superclass.find_method(&key.lexeme).unwrap();
                     let obj = self.env.get_at(&Var::new_wo_token("this", var.hops - 1))?;
                     if let Object::Instance(instance) = obj {
-                        return Ok(Object::Callable(Rc::new(Box::new(method.bind(&instance)))));
+                        return Ok(Object::Callable(Rc::new(Box::new(method.bind(instance)))));
                     }
                 }
                 Err(LoxError::Error("superclass".to_string()))
@@ -241,14 +250,17 @@ impl Interpreter {
         let (mut instance, var) = {
             if let Expr::Variable(var) = e2 {
                 (self.env.get_at(var)?, var)
+            } else if let Expr::This(var) = e2 {
+                (self.env.get_at(var)?, var)
             } else {
-                return Err(LoxError::Error("err".to_string()));
+                return Err(LoxError::Error(format!("Eval set error value: {} var: {:?}", value, e2)));
             }
         };
 
+
         if let Object::Instance(lox_instance) = &mut instance {
             lox_instance.set(name, value.clone())?;
-            self.env.assign(var.name().to_string(), instance.clone())?;
+            self.env.assign(var.name().to_string(), Object::Instance(lox_instance.clone()))?;
             return Ok(value);
         }
         Err(LoxError::Error(format!("{} is not a instance", value)))
@@ -339,6 +351,7 @@ impl Interpreter {
 
     fn call_expr(&mut self, callee: &Expr, args: &[Expr]) -> Result<Object, LoxError> {
         let callee = self.eval_expr(callee)?;
+
 
         let mut arguments = Vec::with_capacity(args.len());
         for e in args {

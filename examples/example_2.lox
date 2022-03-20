@@ -1,0 +1,24 @@
+class Book {
+    init(name, author) {
+        this.author = author;
+        this.name = name;
+    }
+
+    getAuthor() {
+        return this.author;
+    }
+
+    getName() {
+        return this.name;
+    }
+
+
+}
+
+var book = Book("Harry Potter", "Jk Rowling");
+
+var author = book.getAuthor();
+var book_title = book.getName();
+
+
+print "Author: " + author + ", title: " + book_title;

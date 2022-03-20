@@ -1,0 +1,15 @@
+{
+    fun hello() {
+        return "Hello";
+    }
+
+    fun hi() {
+        return "Hi";
+    }
+
+
+    var x = hello();
+    var y = hi();
+    print x + " " + y;
+}
+

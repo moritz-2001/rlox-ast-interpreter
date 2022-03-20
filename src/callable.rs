@@ -71,7 +71,7 @@ impl LoxFunction {
         }
     }
 
-    pub fn bind(&self, instance: &LoxInstance) -> LoxFunction {
+    pub fn bind(&self, instance: LoxInstance) -> LoxFunction {
         let mut env = Environment::new_with_enclosing(&self.env);
         env.define("this".to_string(), Object::Instance(instance.clone()));
 
@@ -91,14 +91,19 @@ impl Callable for LoxFunction {
         for (param, arg) in self.paras.iter().zip(args) {
             env.define(param.lexeme.clone(), arg.clone());
         }
-        if let Err(LoxError::Return(o)) = interpreter.exec_block(&vec![self.body.clone()], env) {
-            Ok(o)
+
+        let res = interpreter.exec_block(&vec![self.body.clone()], env);
+        if let Err(LoxError::Return(o)) = &res {
+            Ok(o.clone())
+        } else if let Err(e) = res {
+            Err(e)
         } else if self.is_init {
             Ok(self.env.get_at(&Var {
                 identifier: Token::new(TokenType::IDENTIFIER, "this".to_string(), None, 0),
                 hops: 0,
             })?)
         } else {
+            res?;
             Ok(Object::Nil)
         }
     }
