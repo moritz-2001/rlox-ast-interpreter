@@ -1,4 +1,3 @@
-use crate::class;
 use crate::expressions::{Expr, Var};
 use crate::statements::Statement;
 use crate::tokens::Token;
@@ -8,7 +7,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq)]
 enum FunctionType {
     None,
-    Function,
     Method,
     Initializer,
 }

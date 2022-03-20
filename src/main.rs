@@ -47,13 +47,11 @@ fn run(input: String) -> Result<(), LoxError> {
     scn.scan_tokens()?;
 
     let tokens = scn.get_tokens();
-    //println!("Tokens: {:?}", tokens);
 
     let mut parser = Parser::new(tokens);
 
     let statements = parser.parse()?;
 
-    //println!("Statements: {:?}", statements);
     Interpreter::interpret(statements)?;
 
     Ok(())

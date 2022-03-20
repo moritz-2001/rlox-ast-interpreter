@@ -8,7 +8,6 @@ use crate::{
     tokens::TokenType,
     Expr, LoxError, Statement, Token,
 };
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::mem;
 use std::rc::Rc;
@@ -53,7 +52,7 @@ impl Interpreter {
     fn eval_stmt(&mut self, stmt: Statement) -> Result<(), LoxError> {
         match stmt {
             Statement::Expr(e) => {
-                let _ = self.eval_expr(e);
+                let _ = self.eval_expr(&e);
                 Ok(())
             }
             Statement::Print(e) => self.eval_print(e),
@@ -110,14 +109,14 @@ impl Interpreter {
     }
 
     fn while_stm(&mut self, cond: Expr, stm: Statement) -> Result<(), LoxError> {
-        while (self.eval_expr(cond.clone())?).is_truthy() {
+        while (self.eval_expr(&cond)?).is_truthy() {
             self.eval_stmt(stm.clone())?;
         }
         Ok(())
     }
 
     fn return_stm(&mut self, e: Expr) -> Result<(), LoxError> {
-        let val = self.eval_expr(e)?;
+        let val = self.eval_expr(&e)?;
         Err(LoxError::Return(val))
     }
 
@@ -141,7 +140,7 @@ impl Interpreter {
         then_stm: Statement,
         else_stm: Option<Box<Statement>>,
     ) -> Result<(), LoxError> {
-        if (self.eval_expr(cond)?).is_truthy() {
+        if (self.eval_expr(&cond)?).is_truthy() {
             self.eval_stmt(then_stm)?;
         } else {
             if let Some(else_stm) = else_stm {
@@ -153,34 +152,34 @@ impl Interpreter {
     }
 
     fn var_dec(&mut self, t: Token, e: Expr) -> Result<(), LoxError> {
-        let obj = self.eval_expr(e)?;
+        let obj = self.eval_expr(&e)?;
         self.env.define(t.lexeme, obj);
         Ok(())
     }
 
     fn eval_print(&mut self, e: Expr) -> Result<(), LoxError> {
-        let val = self.eval_expr(e)?;
+        let val = self.eval_expr(&e)?;
         println!("{}", val);
         Ok(())
     }
 
-    fn eval_expr(&mut self, expr: Expr) -> Result<Object, LoxError> {
+    fn eval_expr(&mut self, expr: &Expr) -> Result<Object, LoxError> {
         match expr {
-            Expr::Literal(o) => Ok(o),
-            Expr::Grouping(e) => self.eval_expr(*e),
-            Expr::Unary(t, e) => self.unary_expr(*e, t),
-            Expr::Binary(e1, t, e2) => self.binary_expr(*e1, *e2, t),
+            Expr::Literal(o) => Ok(o.clone()),
+            Expr::Grouping(e) => self.eval_expr(e.as_ref()),
+            Expr::Unary(t, e) => self.unary_expr(e.as_ref(), &t),
+            Expr::Binary(e1, t, e2) => self.binary_expr(e1.as_ref(), e2.as_ref(), &t),
             Expr::Variable(var) => Ok(self.env.get_at(&var)?.clone()),
-            Expr::Assignment(var, e) => self.assign_expr(*e, var),
-            Expr::Logical(e1, op, e2) => self.logical_expr(*e1, *e2, op),
-            Expr::Call(callee, args) => self.call_expr(*callee, args),
-            Expr::Get(e, name) => self.get_expr(*e, name),
-            Expr::Set(e1, name, e2) => self.set_expr(*e1, *e2, name),
+            Expr::Assignment(var, e) => self.assign_expr(e.as_ref(), &var),
+            Expr::Logical(e1, op, e2) => self.logical_expr(e1.as_ref(), e2.as_ref(), &op),
+            Expr::Call(callee, args) => self.call_expr(callee.as_ref(), &args),
+            Expr::Get(e, name) => self.get_expr(e.as_ref(), &name),
+            Expr::Set(e1, name, e2) => self.set_expr(e1.as_ref(), e2.as_ref(), &name),
             Expr::This(var) => Ok(self.env.get_at(&var)?.clone()),
         }
     }
 
-    fn get_expr(&mut self, e: Expr, name: Token) -> Result<Object, LoxError> {
+    fn get_expr(&mut self, e: &Expr, name: &Token) -> Result<Object, LoxError> {
         let object = self.eval_expr(e)?;
         if let Object::Instance(instance) = &object {
             return instance.get(&name);
@@ -188,7 +187,7 @@ impl Interpreter {
         Err(LoxError::Error(format!("{} is not a instance", object)))
     }
 
-    fn set_expr(&mut self, e1: Expr, e2: Expr, name: Token) -> Result<Object, LoxError> {
+    fn set_expr(&mut self, e1: &Expr, e2: &Expr, name: &Token) -> Result<Object, LoxError> {
         let value = self.eval_expr(e1)?;
         let (mut instance, var) = {
             if let Expr::Variable(var) = e2 {
@@ -206,18 +205,18 @@ impl Interpreter {
         Err(LoxError::Error(format!("{} is not a instance", value)))
     }
 
-    fn logical_expr(&mut self, e1: Expr, e2: Expr, op: Token) -> Result<Object, LoxError> {
+    fn logical_expr(&mut self, e1: &Expr, e2: &Expr, op: &Token) -> Result<Object, LoxError> {
         let left = self.eval_expr(e1)?;
         match op.token_type {
             TokenType::AND => {
-                if left.clone().is_truthy() {
+                if left.is_truthy() {
                     Ok(self.eval_expr(e2)?)
                 } else {
                     Ok(left)
                 }
             }
             TokenType::OR => {
-                if left.clone().is_truthy() {
+                if left.is_truthy() {
                     Ok(left)
                 } else {
                     Ok(self.eval_expr(e2)?)
@@ -227,14 +226,14 @@ impl Interpreter {
         }
     }
 
-    fn assign_expr(&mut self, e: Expr, var: Var) -> Result<Object, LoxError> {
+    fn assign_expr(&mut self, e: &Expr, var: &Var) -> Result<Object, LoxError> {
         let val = self.eval_expr(e)?;
 
         self.env.assign_at(&var, val)?;
         Ok(Object::Nil)
     }
 
-    fn unary_expr(&mut self, e: Expr, operator: Token) -> Result<Object, LoxError> {
+    fn unary_expr(&mut self, e: &Expr, operator: &Token) -> Result<Object, LoxError> {
         let right = self.eval_expr(e)?;
 
         if operator.token_type == TokenType::MINUS {
@@ -252,9 +251,9 @@ impl Interpreter {
 
     fn binary_expr(
         &mut self,
-        left: Expr,
-        right: Expr,
-        operator: Token,
+        left: &Expr,
+        right: &Expr,
+        operator: &Token,
     ) -> Result<Object, LoxError> {
         let left = self.eval_expr(left)?;
         let right = self.eval_expr(right)?;
@@ -289,7 +288,7 @@ impl Interpreter {
         Ok(obj)
     }
 
-    fn call_expr(&mut self, callee: Expr, args: Vec<Expr>) -> Result<Object, LoxError> {
+    fn call_expr(&mut self, callee: &Expr, args: &[Expr]) -> Result<Object, LoxError> {
         let callee = self.eval_expr(callee)?;
 
         let mut arguments = Vec::with_capacity(args.len());

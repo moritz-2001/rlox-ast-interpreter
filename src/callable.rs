@@ -33,7 +33,7 @@ impl PartialEq for dyn Callable {
 pub struct Clock;
 
 impl Callable for Clock {
-    fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, LoxError> {
+    fn call(&self, _: &mut Interpreter, _: &[Object]) -> Result<Object, LoxError> {
         let start = SystemTime::now();
         Ok(Object::Number(
             start.duration_since(UNIX_EPOCH).unwrap().as_secs_f64(),
